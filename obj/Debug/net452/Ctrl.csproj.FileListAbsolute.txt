@@ -1,0 +1,9 @@
+C:\Program Files (x86)\Steam\steamapps\common\Celeste\Mods\server\bin\Debug\net452\Ctrl.dll
+C:\Program Files (x86)\Steam\steamapps\common\Celeste\Mods\server\bin\Debug\net452\Ctrl.pdb
+C:\Program Files (x86)\Steam\steamapps\common\Celeste\Mods\server\obj\Debug\net452\Ctrl.csproj.AssemblyReference.cache
+C:\Program Files (x86)\Steam\steamapps\common\Celeste\Mods\server\obj\Debug\net452\Ctrl.GeneratedMSBuildEditorConfig.editorconfig
+C:\Program Files (x86)\Steam\steamapps\common\Celeste\Mods\server\obj\Debug\net452\Ctrl.AssemblyInfoInputs.cache
+C:\Program Files (x86)\Steam\steamapps\common\Celeste\Mods\server\obj\Debug\net452\Ctrl.AssemblyInfo.cs
+C:\Program Files (x86)\Steam\steamapps\common\Celeste\Mods\server\obj\Debug\net452\Ctrl.csproj.CoreCompileInputs.cache
+C:\Program Files (x86)\Steam\steamapps\common\Celeste\Mods\server\obj\Debug\net452\Ctrl.dll
+C:\Program Files (x86)\Steam\steamapps\common\Celeste\Mods\server\obj\Debug\net452\Ctrl.pdb
