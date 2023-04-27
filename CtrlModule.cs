@@ -265,9 +265,14 @@ namespace Celeste.Mod.Ctrl
             }
 
 
-
+            try
+            {
             orig(self, gameTime);
-
+            }
+            catch (ArgumentOutOfRangeException e)
+            {
+                Console.WriteLine(e);
+            }
 
 
         }
@@ -329,32 +334,40 @@ namespace Celeste.Mod.Ctrl
 
         private static void RespawnSpeed(On.Monocle.Engine.orig_Update orig, Engine self, GameTime time)
         {
-            orig(self, time);
-
-
-            if (Engine.Scene is not Level level)
-            {
-                return;
-            }
-
-            if (level.Paused)
-            {
-                return;
-            }
-
-            Player player = level.Tracker.GetEntity<Player>();
-
-            // 加速复活过程
-            for (int i = 1; i < respawnSpeed && (player == null || player.StateMachine.State == Player.StIntroRespawn); i++)
+            try
             {
                 orig(self, time);
+
+
+                if (Engine.Scene is not Level level)
+            {
+                    return;
+                }
+
+                if (level.Paused)
+                {
+                    return;
+                }
+
+                Player player = level.Tracker.GetEntity<Player>();
+
+                // 加速复活过程
+                for (int i = 1; i < respawnSpeed && (player == null || player.StateMachine.State == Player.StIntroRespawn); i++)
+                {
+                    orig(self, time);
+                }
+
+                // 加速章节启动
+                for (int i = 1; i < respawnSpeed && RequireFastRestart(level, player); i++)
+                {
+                    orig(self, time);
+                }
+            }
+            catch (ArgumentOutOfRangeException e)
+            {
+                Console.WriteLine(e);
             }
 
-            // 加速章节启动
-            for (int i = 1; i < respawnSpeed && RequireFastRestart(level, player); i++)
-            {
-                orig(self, time);
-            }
         }
 
         private static bool RequireFastRestart(Level level, Player player)

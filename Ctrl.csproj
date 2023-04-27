@@ -2,37 +2,68 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net452</TargetFramework>
+    <TargetFramework>net7.0</TargetFramework>
     <AssemblyName>Ctrl</AssemblyName>
     <RootNamespace>Celeste.Mod.ctrl</RootNamespace>
     <LangVersion>9</LangVersion>
     <CelesteGamePath Condition="'$(CELESTEGAMEPATH)' == ''">..\..</CelesteGamePath>
     <AutoGenerateBindingRedirects>True</AutoGenerateBindingRedirects>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+   
+
   </PropertyGroup>
 
   <!--Disable "Copy Local" for all references-->
+  
   <ItemDefinitionGroup>
     <PackageReference PrivateAssets="all" ExcludeAssets="runtime" />
-    <Reference Private="false" />
+     <!--<Reference Private="false" />-->
   </ItemDefinitionGroup>
-
+  
   <ItemGroup>
-    <PackageReference Include="MonoMod" Version="21.08.19.01" />
-    <PackageReference Include="MonoMod.RuntimeDetour" Version="21.08.19.01" />
-    <PackageReference Include="NetMQ" Version="4.0.1.11" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="MonoMod" Version="21.08.19.01">
+      <Private>false</Private>
+    </PackageReference>
+    <PackageReference Include="MonoMod.RuntimeDetour" Version="21.08.19.01">
+      <Private>false</Private>
+    </PackageReference>
+
+    <PackageReference Include="NetMQ" Version="4.0.1.11">
+      <Private>true</Private>
+      <ExcludeAssets>none</ExcludeAssets>
+      <IncludeAssets>all</IncludeAssets>
+      <PrivateAssets>contentfiles;analyzers;build</PrivateAssets>
+
+
+
+    </PackageReference>
+
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3">
+      <Private>false</Private>
+    </PackageReference>
+    
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="Celeste" HintPath="$(CELESTEGAMEPATH)\Celeste.exe" />
-    <Reference Include="MMHOOK_Celeste" HintPath="$(CELESTEGAMEPATH)\MMHOOK_Celeste.dll" />
-    <Reference Include="YamlDotNet" HintPath="$(CELESTEGAMEPATH)\YamlDotNet.dll" />
+    <Reference Include="Celeste" HintPath="$(CELESTEGAMEPATH)\Celeste.dll">
+      <IncludeAssets>compile</IncludeAssets>
+      <Private>false</Private>
+      <PrivateAssets>all</PrivateAssets>
+    </Reference>
+    <Reference Include="MMHOOK_Celeste" HintPath="$(CELESTEGAMEPATH)\MMHOOK_Celeste.dll">
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="YamlDotNet" HintPath="$(CELESTEGAMEPATH)\YamlDotNet.dll">
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <Choose>
     <When Condition="'$(OS)' != 'Windows_NT' Or Exists('$(CELESTEGAMEPATH)\FNA.dll')">
       <ItemGroup>
-        <Reference Include="FNA" HintPath="$(CELESTEGAMEPATH)\FNA.dll" />
+        <Reference Include="FNA" HintPath="$(CELESTEGAMEPATH)\FNA.dll">
+          <Private>false</Private>
+        </Reference>
       </ItemGroup>
     </When>
 
