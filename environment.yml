@@ -2,17 +2,14 @@ name: zmq
 channels:
   - conda-forge
 dependencies:
-  - ca-certificates=2022.12.7=h5b45459_0
-  - libsqlite=3.40.0=hcfcfb64_0
-  - openssl=1.1.1t=hcfcfb64_0
-  - pip=23.1=pyhd8ed1ab_0
-  - python=3.8.0=hc9e8b01_5
-  - setuptools=67.6.1=pyhd8ed1ab_0
-  - sqlite=3.40.0=hcfcfb64_0
-  - ucrt=10.0.22621.0=h57928b3_0
-  - vc=14.3=hb6edc58_10
-  - vs2015_runtime=14.34.31931=h4c5c07a_10
-  - wheel=0.40.0=pyhd8ed1ab_0
+  - ca-certificates=2022.12.7
+  - libsqlite=3.40.0
+  - openssl=1.1.1t
+  - pip=23.1
+  - python=3.8.0
+  - setuptools=67.6.1
+  - sqlite=3.40.0
+  - wheel=0.40.0
   - pip:
       - absl-py==1.4.0
       - aiofiles==22.1.0
@@ -140,8 +137,6 @@ dependencies:
       - python-dateutil==2.8.2
       - python-json-logger==2.0.7
       - pytz==2023.3
-      - pywin32==306
-      - pywinpty==2.0.10
       - pyyaml==6.0
       - pyzmq==25.0.2
       - qtconsole==5.4.2
@@ -166,10 +161,6 @@ dependencies:
       - tensorboard==2.11.0
       - tensorboard-data-server==0.6.1
       - tensorboard-plugin-wit==1.8.1
-      - tensorflow==2.11.0
-      - tensorflow-estimator==2.11.0
-      - tensorflow-intel==2.11.0
-      - tensorflow-io-gcs-filesystem==0.31.0
       - termcolor==2.3.0
       - terminado==0.17.1
       - tinycss2==1.2.1
