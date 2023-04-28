@@ -50,11 +50,11 @@ namespace Celeste.Mod.Ctrl
         private Thread runningThread;
         private List<int> inputFrame;
 
-        private float reward;
-        private float bestX;
+        private double distance;
+        private double bestX;
         private Vector2 playerSpawn;
         private bool terminated;
-        private bool spawned;
+        private double timesteps;
         public static int respawnSpeed = 20;
         private const string StopFastRestartFlag = nameof(StopFastRestartFlag);
 
@@ -65,10 +65,10 @@ namespace Celeste.Mod.Ctrl
             server = new ResponseSocket();
             server.Bind("tcp://*:7777");
             inputFrame = null;
-            reward = 0;
+            distance = 0;
             playerSpawn = Vector2.Zero;
             terminated = true;
-            spawned = true;
+            timesteps = 0;
             bestX = 0;
         }
 
@@ -139,23 +139,6 @@ namespace Celeste.Mod.Ctrl
                 UpdateVirtualInputs.Invoke(null, new object[] { });
 
 
-#if false
-                if (Engine.Commands.Open)
-                {
-                    MethodInfo UpdateKeyboard = typeof(MInput.KeyboardData).GetMethod("UpdateNull", BindingFlags.Instance | BindingFlags.NonPublic);
-                    UpdateKeyboard.Invoke(MInput.Keyboard, new object[] { });
-                }
-                else
-                {
-                    MethodInfo UpdateKeyboard = typeof(MInput.KeyboardData).GetMethod("Update", BindingFlags.Instance | BindingFlags.NonPublic);
-                    UpdateKeyboard.Invoke(MInput.Keyboard, new object[] { });
-                }
-
-                MethodInfo UpdateVirtualInputs = typeof(MInput).GetMethod("UpdateVirtualInputs", BindingFlags.Static | BindingFlags.NonPublic);
-                UpdateVirtualInputs.Invoke(null, new object[] { });
-
-                MInput.ControllerHasFocus = false;
-#endif
 
 
             }
@@ -177,6 +160,9 @@ namespace Celeste.Mod.Ctrl
         private void OnDie(Player player)
         {
             terminated = true;
+
+            MethodInfo CmdLoad = typeof(Commands).GetMethod("CmdLoad", BindingFlags.Static | BindingFlags.NonPublic);
+            CmdLoad.Invoke(null, new object[] {1,"1"});
         }
 
 
@@ -242,7 +228,7 @@ namespace Celeste.Mod.Ctrl
 
                         };
 
-                        string payload = JsonConvert.SerializeObject(new List<object>() { dic, reward, terminated });
+                        string payload = JsonConvert.SerializeObject(new List<object>() { dic, distance - timesteps, terminated });
 
                         string clpay = server.ReceiveFrameString();
                         inputFrame = JsonConvert.DeserializeObject<List<int>>(clpay);
@@ -252,11 +238,9 @@ namespace Celeste.Mod.Ctrl
                         if (inputFrame != null && inputFrame.Count == 1)
                         {
                             terminated = false;
-                            reward = 0;
+                            distance = 0;
+                            timesteps = 0;
                             bestX = 0;
-
-                            DynamicData cmd = new DynamicData(typeof(Commands));
-                            cmd.Invoke("CmdLoadIDorSID", "1", "1");
                         }
                     }
 
@@ -264,15 +248,7 @@ namespace Celeste.Mod.Ctrl
                 runningThread.Start();
             }
 
-
-            try
-            {
             orig(self, gameTime);
-            }
-            catch (ArgumentOutOfRangeException e)
-            {
-                Console.WriteLine(e);
-            }
 
 
         }
@@ -315,58 +291,46 @@ namespace Celeste.Mod.Ctrl
 
             if (deltaX > bestX)
             {
-                reward = ((deltaX - bestX)/100);
+                distance = ((deltaX - bestX)/100);
                 bestX = deltaX;
             }
             
+            timesteps += 0.00002;
 
             orig(self);
         }
 
-        public void InputUpdate(On.Monocle.MInput.KeyboardData.orig_Update orig, global::Monocle.MInput.KeyboardData self)
-        {
-            // orig(self);
-
-
-
-
-        }
 
         private static void RespawnSpeed(On.Monocle.Engine.orig_Update orig, Engine self, GameTime time)
         {
-            try
+
+            orig(self, time);
+
+
+            if (Engine.Scene is not Level level)
+            {
+                return;
+            }
+
+            if (level.Paused)
+            {
+                return;
+            }
+
+            Player player = level.Tracker.GetEntity<Player>();
+
+            // 加速复活过程
+            for (int i = 1; i < respawnSpeed && (player == null || player.StateMachine.State == Player.StIntroRespawn); i++)
             {
                 orig(self, time);
-
-
-                if (Engine.Scene is not Level level)
-            {
-                    return;
-                }
-
-                if (level.Paused)
-                {
-                    return;
-                }
-
-                Player player = level.Tracker.GetEntity<Player>();
-
-                // 加速复活过程
-                for (int i = 1; i < respawnSpeed && (player == null || player.StateMachine.State == Player.StIntroRespawn); i++)
-                {
-                    orig(self, time);
-                }
-
-                // 加速章节启动
-                for (int i = 1; i < respawnSpeed && RequireFastRestart(level, player); i++)
-                {
-                    orig(self, time);
-                }
             }
-            catch (ArgumentOutOfRangeException e)
+
+            // 加速章节启动
+            for (int i = 1; i < respawnSpeed && RequireFastRestart(level, player); i++)
             {
-                Console.WriteLine(e);
+                orig(self, time);
             }
+
 
         }
 
@@ -393,176 +357,6 @@ namespace Celeste.Mod.Ctrl
 
 
 
-#if false
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="self"></param>
-        public delegate void orig_Tick(Game self);
-        public static void GameTick(orig_Tick orig, Game self)
-        {
-            DynamicData game = new DynamicData(self);
-            game.Set("IsFixedTimeStep", false);
-            orig(self);
-        }
-
-        private void OnSpawn(Player player)
-        {
-            prevCenter = player.Center;
-            playerReady = true;
-        }
-
-        private void OnDie(Player player)
-        {
-            playerReady = false;
-            roomsVisited.Clear();
-            reward -= 10;
-            terminated = true;
-
-            // Reset to first room on death.
-            DynamicData cmd = new DynamicData(typeof(Commands));
-            cmd.Invoke("CmdLoadIDorSID", "1", "1");
-        }
-
-        private void OnTransitionTo(Level level, LevelData next, Vector2 direction)
-        {
-            // Don't reward revisit of rooms.
-            if (!roomsVisited.Contains(next.Name))
-            {
-                roomsVisited.Add(next.Name);
-                reward += 200;
-            }
-        }
-
-        private void GameRun(On.Monocle.Engine.orig_RunWithLogging orig, global::Monocle.Engine self)
-        {
-            try
-            {
-                // Create ZMQ connection for RL agent.
-                server = new ResponseSocket();
-                server.Bind("tcp://*:7777");
-                orig(self);
-            }
-            finally
-            {
-                server?.Dispose();
-            }
-        }
-
-        private void GameUpdate(On.Celeste.Celeste.orig_Update orig, Celeste self, GameTime gameTime)
-        {
-            // Custom stepping.
-            if (playerReady)
-            {
-                // Read agent command.
-                string payload = server.ReceiveFrameString();
-                inputFrame = JsonConvert.DeserializeObject<List<int>>(payload);
-
-                // Run update.
-                orig(self, gameTime);
-
-                // Send back reward.
-                payload = JsonConvert.SerializeObject(new List<int> { reward, terminated ? 1 : 0 });
-                server.SendFrame(payload);
-
-                // Reset reward and terminated status.
-                reward = -1;
-                terminated = false;
-            }
-            else
-            {
-                // Regular updates.
-                orig(self, gameTime);
-            }
-        }
-
-        private void PlayerUpdate(On.Celeste.Player.orig_Update orig, global::Celeste.Player self)
-        {
-            // Naive reward of how much the agent moved toward the top right.
-            float deltaX = Convert.ToInt32(self.Center.X - prevCenter.X);
-            float deltaY = -Convert.ToInt32(self.Center.Y - prevCenter.Y); // Up is negative.
-            int dist = Convert.ToInt32(Math.Sqrt(deltaX * deltaX + deltaY * deltaY)); // Dist is positive.
-            if (deltaX < 0 || deltaY < 0)
-            {
-                // Only give positive rewards for moving up and/or to the right.
-                dist *= -1;
-            }
-            reward += dist;
-            prevCenter = self.Center;
-
-            // If agent doesn't move for 1000 timesteps, terminate.
-            if (deltaX == 0 && deltaY == 0)
-            {
-                if (++idleCount >= 150)
-                {
-                    idleCount = 0;
-                    reward -= 100;
-                    terminated = true;
-                }
-            }
-
-            orig(self);
-        }
-
-        private void InputUpdate(On.Monocle.MInput.KeyboardData.orig_Update orig, global::Monocle.MInput.KeyboardData self)
-        {
-            orig(self);
-            if (playerReady && inputFrame != null && inputFrame.Count == 7)
-            {
-                // Convert agent action to keys pressed.
-                List<Keys> keys = new List<Keys>();
-                if (inputFrame[0] == 1)
-                {
-                    keys.Add(Keys.Left);
-                }
-                if (inputFrame[1] == 1)
-                {
-                    keys.Add(Keys.Right);
-                }
-                if (inputFrame[2] == 1)
-                {
-                    keys.Add(Keys.Up);
-                }
-                if (inputFrame[3] == 1)
-                {
-                    keys.Add(Keys.Down);
-                }
-                if (inputFrame[4] == 1)
-                {
-                    // Jump
-                    keys.Add(Keys.C);
-                }
-                if (inputFrame[5] == 1)
-                {
-                    // Dash
-                    keys.Add(Keys.X);
-                }
-                if (inputFrame[6] == 1)
-                {
-                    // Grab
-                    keys.Add(Keys.Z);
-                }
-
-                // Press desired keys.
-                KeyboardState state = new KeyboardState(keys.ToArray());
-                Monocle.MInput.Keyboard.CurrentState = state;
-
-            }
-            else if (inputFrame != null && inputFrame.Count == 1)
-            {
-                // Reset not really needed as this is done on death and next update.
-                roomsVisited.Clear();
-                terminated = false;
-
-                // Reset to first room on death.
-                DynamicData cmd = new DynamicData(typeof(Commands));
-                cmd.Invoke("CmdLoadIDorSID", "1", "1");
-            }
-            // Reset inputFrame.
-            inputFrame = null;
-        }
-
-#endif
 }
 
 
