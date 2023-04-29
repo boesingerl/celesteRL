@@ -241,6 +241,7 @@ namespace Celeste.Mod.Ctrl
                             distance = 0;
                             timesteps = 0;
                             bestX = 0;
+                            player.Die();
                         }
                     }
 
