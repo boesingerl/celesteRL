@@ -21,16 +21,19 @@ using static Celeste.Player.ChaserStateSound;
 
 namespace Celeste.Mod.Ctrl
 {
-
     public class IgnorePropertiesResolver : DefaultContractResolver
     {
         private readonly HashSet<string> ignoreProps;
+
         public IgnorePropertiesResolver(IEnumerable<string> propNamesToIgnore)
         {
             this.ignoreProps = new HashSet<string>(propNamesToIgnore);
         }
 
-        protected override JsonProperty CreateProperty(MemberInfo member, MemberSerialization memberSerialization)
+        protected override JsonProperty CreateProperty(
+            MemberInfo member,
+            MemberSerialization memberSerialization
+        )
         {
             JsonProperty property = base.CreateProperty(member, memberSerialization);
             if (!this.ignoreProps.Contains(property.PropertyName))
@@ -43,13 +46,15 @@ namespace Celeste.Mod.Ctrl
 
     public class CtrlModule : EverestModule
     {
-
         public static CtrlModule instance;
 
         private ResponseSocket server;
         private Thread runningThread;
         private List<int> inputFrame;
-
+        private bool TPFlag;
+        private bool runThread;
+        private bool playerPresent;
+        private Dictionary<string, object> observations;
         private double distance;
         private double bestX;
         private Vector2 playerSpawn;
@@ -70,6 +75,10 @@ namespace Celeste.Mod.Ctrl
             terminated = true;
             timesteps = 0;
             bestX = 0;
+            TPFlag = false;
+            runThread = false;
+            playerPresent = false;
+            observations = null;
         }
 
         public override void Load()
@@ -79,14 +88,19 @@ namespace Celeste.Mod.Ctrl
             Everest.Events.Player.OnSpawn += OnSpawn;
             Everest.Events.Player.OnDie += OnDie;
             On.Celeste.Player.Update += PlayerUpdate;
-
             On.Monocle.Engine.Update += RespawnSpeed;
             IL.Monocle.MInput.Update += MInputOnUpdate;
 
+            runThread = true;
+            runningThread = new Thread(SendObs);
+            runningThread.Start();
         }
 
         public override void Unload()
         {
+            runThread = false;
+            runningThread = null;
+
             On.Celeste.Celeste.Update -= GameUpdate;
             On.Monocle.MInput.GamePadData.Update -= GpUpdate;
             Everest.Events.Player.OnSpawn -= OnSpawn;
@@ -96,27 +110,27 @@ namespace Celeste.Mod.Ctrl
             IL.Monocle.MInput.Update -= MInputOnUpdate;
 
             server?.Dispose();
-
         }
 
-        private void GpUpdate(On.Monocle.MInput.GamePadData.orig_Update orig, MInput.GamePadData self)
+        private void GpUpdate(
+            On.Monocle.MInput.GamePadData.orig_Update orig,
+            MInput.GamePadData self
+        )
         {
             orig(self);
 
             if (!terminated && inputFrame != null && inputFrame.Count == 7)
             {
-
-
                 // Convert agent action to keys pressed.
                 GamePadButtons buttons = new GamePadButtons(
                     (inputFrame[0] == 1 ? Buttons.DPadLeft : 0)
-                    | (inputFrame[1] == 1 ? Buttons.DPadRight : 0)
-                    | (inputFrame[2] == 1 ? Buttons.DPadUp : 0)
-                    | (inputFrame[3] == 1 ? Buttons.DPadDown : 0)
-                    | (inputFrame[4] == 1 ? Buttons.A : 0)
-                    | (inputFrame[5] == 1 ? Buttons.X : 0)
-                    | (inputFrame[6] == 1 ? Buttons.RightTrigger : 0)
-                    );
+                        | (inputFrame[1] == 1 ? Buttons.DPadRight : 0)
+                        | (inputFrame[2] == 1 ? Buttons.DPadUp : 0)
+                        | (inputFrame[3] == 1 ? Buttons.DPadDown : 0)
+                        | (inputFrame[4] == 1 ? Buttons.A : 0)
+                        | (inputFrame[5] == 1 ? Buttons.X : 0)
+                        | (inputFrame[6] == 1 ? Buttons.RightTrigger : 0)
+                );
                 GamePadDPad pad = new GamePadDPad(
                     inputFrame[2] == 1 ? ButtonState.Pressed : ButtonState.Released,
                     inputFrame[3] == 1 ? ButtonState.Pressed : ButtonState.Released,
@@ -135,14 +149,12 @@ namespace Celeste.Mod.Ctrl
                 MInput.GamePads[0].CurrentState = state;
                 MInput.ControllerHasFocus = true;
 
-                MethodInfo UpdateVirtualInputs = typeof(MInput).GetMethod("UpdateVirtualInputs", BindingFlags.Static | BindingFlags.NonPublic);
+                MethodInfo UpdateVirtualInputs = typeof(MInput).GetMethod(
+                    "UpdateVirtualInputs",
+                    BindingFlags.Static | BindingFlags.NonPublic
+                );
                 UpdateVirtualInputs.Invoke(null, new object[] { });
-
-
-
-
             }
-
         }
 
         public static object GetProperty(Entity obj, string propertyName)
@@ -160,114 +172,165 @@ namespace Celeste.Mod.Ctrl
         private void OnDie(Player player)
         {
             terminated = true;
-
-            MethodInfo CmdLoad = typeof(Commands).GetMethod("CmdLoad", BindingFlags.Static | BindingFlags.NonPublic);
-            CmdLoad.Invoke(null, new object[] {1,"1"});
+            TPFlag = true;
         }
 
+        private void SendObs(){
+            while (runThread)
+            {
+                if (observations is not null && (playerPresent || terminated))
+                {
+                    
+                    string clpay = server.ReceiveFrameString();
+                    inputFrame = JsonConvert.DeserializeObject<List<int>>(clpay);
 
-        private void GameUpdate(On.Celeste.Celeste.orig_Update orig, Celeste self, GameTime gameTime)
+                    string payload = JsonConvert.SerializeObject(
+                        new List<object>() { observations, distance - timesteps, terminated }
+                    );
+
+                    server.SendFrame(payload);
+
+                    if (inputFrame != null && inputFrame.Count == 1)
+                    {
+                        terminated = false;
+                        distance = 0;
+                        timesteps = 0;
+                        bestX = 0;
+                        TPFlag = true;
+                    }
+                }
+            }
+        }
+
+        private void updatePayload()
         {
+
+            if (Celeste.Scene is not Level || Celeste.Scene.GetType() != typeof(Level))
+                return;
+
+            Level celesteLevel = (Level)Celeste.Scene;
+
+
+            SolidTiles tiles = celesteLevel.SolidTiles;
+            var mTextures = tiles.Tiles.Tiles.ToArray();
+            var leveldata = celesteLevel.Session.LevelData;
+            
+
+            Player player = Celeste.Scene.Tracker.GetEntity<Player>();
+            if (player == null)
+                return;
+            Vector2 playerPos = player.Position;
+
+
+            Entity[] entits = Monocle.Engine.Scene.Entities.ToArray();
+            List<Dictionary<string, string>> entities_ser =
+                new List<Dictionary<string, string>>();
+
+            playerPresent = false;
+
+            foreach (Entity ent in entits)
+            {
+                Dictionary<string, string> attrs = new Dictionary<string, string>();
+
+                attrs["Name"] = ent.GetType().ToString();
+
+                if (attrs["Name"] == "Celeste.Player")
+                {
+                    playerPresent = true;
+                }
+
+                foreach (
+                    string attrname in new[]
+                    {
+                        "X",
+                        "Y",
+                        "Width",
+                        "Height",
+                        "Left",
+                        "Right",
+                        "Bottom",
+                        "Top",
+                        "Direction"
+                    }
+                )
+                {
+                    var val = GetProperty(ent, attrname);
+                    if (val != null)
+                    {
+                        attrs[attrname] = val.ToString();
+                    }
+                }
+
+                entities_ser.Add(attrs);
+            }
+
+            observations = new Dictionary<string, object>
+                {
+                    ["solids"] = leveldata.Solids,
+                    ["bounds"] = leveldata.Bounds,
+                    ["player"] = playerPos,
+                    ["entities"] = entities_ser
+                };
+        }
+
+        private void GameUpdate(
+            On.Celeste.Celeste.orig_Update orig,
+            Celeste self,
+            GameTime gameTime
+        )
+        {
+            if (Celeste.Scene is Level)
+            {
+                Level lvl = (Level)Celeste.Scene;
+                Player player = lvl.Tracker.GetEntity<Player>();
+                if (TPFlag && player != null)
+                {
+                    if (lvl.Session.Level != "1")
+                    {
+                        MethodInfo CmdLoad = typeof(Commands).GetMethod(
+                            "CmdLoad",
+                            BindingFlags.Static | BindingFlags.NonPublic
+                        );
+                        CmdLoad.Invoke(null, new object[] { 1, "1" });
+                    }
+
+                    TPFlag = false;
+                }
+            }
+
+            updatePayload();
 
             if (runningThread == null || !runningThread.IsAlive)
             {
-                runningThread = new Thread(() =>
-                {
-
-                    if (Celeste.Scene == null || Celeste.Scene.GetType() != typeof(Level))
-                        return;
-
-                    Level celesteLevel = (Level)Celeste.Scene;
-
-                    SolidTiles tiles = celesteLevel.SolidTiles;
-                    var mTextures = tiles.Tiles.Tiles.ToArray();
-                    var leveldata = celesteLevel.Session.LevelData;
-                    Player player = Celeste.Scene.Tracker.GetEntity<Player>();
-
-                    if (player == null)
-                        return;
-
-                    Entity[] entits = Monocle.Engine.Scene.Entities.ToArray();
-                    List<Dictionary<string, string>> entities_ser = new List<Dictionary<string, string>>();
-
-                    bool playerPresent = false;
-
-                    foreach (Entity ent in entits)
-                    {
-                        Dictionary<string, string> attrs = new Dictionary<string, string>();
-
-                        attrs["Name"] = ent.GetType().ToString();
-
-                        if (attrs["Name"] == "Celeste.Player")
-                        {
-                            playerPresent = true;
-                        }
-
-                        foreach (string attrname in new[] { "X", "Y", "Width", "Height", "Left", "Right", "Bottom", "Top", "Direction" })
-                        {
-                            var val = GetProperty(ent, attrname);
-                            if (val != null)
-                            {
-                                attrs[attrname] = val.ToString();
-
-                            }
-                    }
-
-
-                        entities_ser.Add(attrs);
-                    }
-
-                    if (playerPresent || terminated)
-                    {
-                        Dictionary<string, object> dic = new Dictionary<string, object>
-                        {
-                            ["solids"] = leveldata.Solids,
-                            ["bounds"] = leveldata.Bounds,
-                            ["player"] = player.Position,
-                            ["entities"] = entities_ser
-
-                        };
-
-                        string payload = JsonConvert.SerializeObject(new List<object>() { dic, distance - timesteps, terminated });
-
-                        string clpay = server.ReceiveFrameString();
-                        inputFrame = JsonConvert.DeserializeObject<List<int>>(clpay);
-
-                        server.SendFrame(payload);
-
-                        if (inputFrame != null && inputFrame.Count == 1)
-                        {
-                            terminated = false;
-                            distance = 0;
-                            timesteps = 0;
-                            bestX = 0;
-                            player.Die();
-                        }
-                    }
-
-                });
+                runningThread = new Thread(() => { });
                 runningThread.Start();
             }
 
             orig(self, gameTime);
-
-
         }
 
-            // update controller even the game is lose focus 
-    private static void MInputOnUpdate(ILContext il) {
-        ILCursor ilCursor = new(il);
-        ilCursor.Goto(il.Instrs.Count - 1);
+        // update controller even the game is lose focus
+        private static void MInputOnUpdate(ILContext il)
+        {
+            ILCursor ilCursor = new(il);
+            ilCursor.Goto(il.Instrs.Count - 1);
 
-        if (ilCursor.TryGotoPrev(MoveType.After, i => i.MatchCallvirt<MInput.MouseData>("UpdateNull"))) {
-            ilCursor.EmitDelegate<Action>(UpdateGamePads);
-        }
+            if (
+                ilCursor.TryGotoPrev(
+                    MoveType.After,
+                    i => i.MatchCallvirt<MInput.MouseData>("UpdateNull")
+                )
+            )
+            {
+                ilCursor.EmitDelegate<Action>(UpdateGamePads);
+            }
 
-        // skip the orig GamePads[j].UpdateNull();
-        if (ilCursor.TryGotoNext(MoveType.After, i => i.MatchLdcI4(0))) {
-            ilCursor.Emit(OpCodes.Ldc_I4_4).Emit(OpCodes.Add);
+            // skip the orig GamePads[j].UpdateNull();
+            if (ilCursor.TryGotoNext(MoveType.After, i => i.MatchLdcI4(0)))
+            {
+                ilCursor.Emit(OpCodes.Ldc_I4_4).Emit(OpCodes.Add);
+            }
         }
-    }
 
         private static void UpdateGamePads()
         {
@@ -284,29 +347,28 @@ namespace Celeste.Mod.Ctrl
             }
         }
 
-
         private void PlayerUpdate(On.Celeste.Player.orig_Update orig, global::Celeste.Player self)
         {
-
             float deltaX = Convert.ToInt32(self.Center.X - playerSpawn.X);
 
             if (deltaX > bestX)
             {
-                distance = ((deltaX - bestX)/100);
+                distance = ((deltaX - bestX) / 100);
                 bestX = deltaX;
             }
-            
+
             timesteps += 0.00002;
 
             orig(self);
         }
 
-
-        private static void RespawnSpeed(On.Monocle.Engine.orig_Update orig, Engine self, GameTime time)
+        private static void RespawnSpeed(
+            On.Monocle.Engine.orig_Update orig,
+            Engine self,
+            GameTime time
+        )
         {
-
             orig(self, time);
-
 
             if (Engine.Scene is not Level level)
             {
@@ -321,7 +383,12 @@ namespace Celeste.Mod.Ctrl
             Player player = level.Tracker.GetEntity<Player>();
 
             // 加速复活过程
-            for (int i = 1; i < respawnSpeed && (player == null || player.StateMachine.State == Player.StIntroRespawn); i++)
+            for (
+                int i = 1;
+                i < respawnSpeed
+                    && (player == null || player.StateMachine.State == Player.StIntroRespawn);
+                i++
+            )
             {
                 orig(self, time);
             }
@@ -331,8 +398,6 @@ namespace Celeste.Mod.Ctrl
             {
                 orig(self, time);
             }
-
-
         }
 
         private static bool RequireFastRestart(Level level, Player player)
@@ -342,9 +407,15 @@ namespace Celeste.Mod.Ctrl
                 return false;
             }
 
-            bool result = !level.TimerStarted && level.Session.Area.ID != 8 && !level.SkippingCutscene &&
-                          player?.StateMachine.State != Player.StIntroRespawn ||
-                          level.TimerStarted && !level.InCutscene && level.Session.FirstLevel && player?.InControl != true;
+            bool result =
+                !level.TimerStarted
+                    && level.Session.Area.ID != 8
+                    && !level.SkippingCutscene
+                    && player?.StateMachine.State != Player.StIntroRespawn
+                || level.TimerStarted
+                    && !level.InCutscene
+                    && level.Session.FirstLevel
+                    && player?.InControl != true;
 
             if (!result)
             {
@@ -353,11 +424,5 @@ namespace Celeste.Mod.Ctrl
 
             return result;
         }
-
     }
-
-
-
 }
-
-
