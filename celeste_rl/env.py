@@ -24,19 +24,21 @@ from stable_baselines3.common.logger import TensorBoardOutputFormat
 
 class CelesteGym(RealTimeGymInterface):
 
-    def __init__(self, render_mode='rgb_array'):
+    def __init__(self, render_mode='rgb_array', scale=1, vision_size=64):
         # Communication to C# component.
         
         self.context = None
         self.initialized = False
         self.latest_obs = None
         self.render_mode = render_mode
+        self.scale = scale
+        self.vision_size = vision_size
 
     def get_observation_space(self):
         return spaces.Tuple((spaces.Box(
             low=0, high=1, shape=(LevelRenderer.max_idx+1,
-                                  LevelRenderer.VISION_SIZE*LevelRenderer.RESCALE,
-                                  LevelRenderer.VISION_SIZE*LevelRenderer.RESCALE), dtype=np.float64
+                                  self.vision_size*self.scale,
+                                  self.vision_size*self.scale), dtype=np.float64
         ),))
 
     def get_action_space(self):
@@ -65,7 +67,7 @@ class CelesteGym(RealTimeGymInterface):
             
             self.socket.send_string(json.dumps([1]))
             obs_dic, _, _ = json.loads(self.socket.recv())
-            obs = LevelRenderer.create_obs(obs_dic)
+            obs = LevelRenderer.create_obs(obs_dic, self.scale, self.vision_size)
             
             self.latest_obs = obs
             
@@ -73,7 +75,7 @@ class CelesteGym(RealTimeGymInterface):
 
     def get_obs_rew_terminated_info(self):
         obs_dic, reward, terminated = json.loads(self.socket.recv())
-        obs = LevelRenderer.create_obs(obs_dic)
+        obs = LevelRenderer.create_obs(obs_dic, self.scale, self.vision_size)
         self.latest_obs = obs
         
         info = {}
@@ -197,14 +199,12 @@ class CustomEnv(gym.Env):
         # Define action and observation space
         # They must be gym.spaces objects
         # Example when using discrete actions:
-        self.action_space = spaces.MultiBinary(7)
+        self.action_space = env.action_space
         # Example for using image as input (channel-first; channel-last also works):
-        self.observation_space = spaces.Box(
-            low=0, high=1, shape=(LevelRenderer.max_idx+1,
-                                  LevelRenderer.VISION_SIZE*LevelRenderer.RESCALE,
-                                  LevelRenderer.VISION_SIZE*LevelRenderer.RESCALE), dtype=np.float64
-        )
+        
+        self.observation_space = env.observation_space[0]
         self.env = env
+        
         self.render_mode = render_mode
 
     def step(self, action):
