@@ -4,11 +4,75 @@ import gymnasium as gym
 import torch as th
 from gymnasium import spaces
 from torch import nn
+from stable_baselines3.common.torch_layers import NatureCNN
+
 
 import gymnasium.spaces as spaces
 
 
 import gymnasium as gym
+
+
+class CustomCombinedExtractor(BaseFeaturesExtractor):
+    def __init__(self, observation_space: spaces.Dict):
+        # We do not know features-dim here before going over all the items,
+        # so put something dummy for now. PyTorch requires calling
+        # nn.Module.__init__ before adding modules
+        super().__init__(observation_space, features_dim=1)
+
+        extractors = {}
+
+        actual_observes = observation_space.spaces
+        vector_spaces = []
+        
+        total_concat_size = 0
+        # We need to know size of the output of this extractor,
+        # so go over all the spaces and compute output feature sizes
+        for key, subspace in actual_observes.items():
+            if key == "image":
+                # We will just downsample one channel of the image by 4x4 and flatten.
+                # Assume the image is single-channel (subspace.shape[0] == 0)
+                
+                extractor = NatureCNN(subspace, normalized_image=True)
+                extractors[key] = extractor
+                total_concat_size += extractor.linear[0].out_features
+                
+            # assume flat vectors
+            else:
+                vector_spaces.append(subspace)
+
+        # create vector extractor
+        input_shape = sum(x.shape[0] for x in vector_spaces)
+        vector_extractor = nn.Sequential(
+            nn.Linear(input_shape, 16),
+            nn.ReLU(),
+            nn.Linear(16, 16))
+        total_concat_size += 16
+        extractors['vectors'] = vector_extractor
+        
+        self.extractors = nn.ModuleDict(extractors)
+
+        # Update the features dim manually
+        self._features_dim = total_concat_size
+
+    def forward(self, observations) -> th.Tensor:
+        encoded_tensor_list = []
+
+        obs_dic = observations
+        vector_obs = []
+        
+        # self.extractors contain nn.Modules that do all the processing.
+        for key, obs in obs_dic.items():
+            
+            if key in self.extractors:
+                encoded_tensor_list.append(self.extractors[key](obs))
+            else:
+                vector_obs.append(obs)
+            
+        encoded_tensor_list.append(self.extractors['vectors'](th.cat(vector_obs, dim=1)))
+        
+        # Return a (B, self._features_dim) PyTorch tensor, where B is batch dimension.
+        return th.cat(encoded_tensor_list, dim=1)
 
 
 class FeatureCNN(BaseFeaturesExtractor):

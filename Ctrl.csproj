@@ -5,7 +5,7 @@
     <TargetFramework>net7.0</TargetFramework>
     <AssemblyName>Ctrl</AssemblyName>
     <RootNamespace>Celeste.Mod.ctrl</RootNamespace>
-    <LangVersion>9</LangVersion>
+    <LangVersion>10</LangVersion>
     <CelesteGamePath Condition="'$(CELESTEGAMEPATH)' == ''">..\..</CelesteGamePath>
     <AutoGenerateBindingRedirects>True</AutoGenerateBindingRedirects>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>

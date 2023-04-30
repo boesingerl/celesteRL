@@ -86,7 +86,13 @@ class LevelRenderer:
     @staticmethod
     def create_obs(obs_dic, scale, vision_size):
         original_obs = LevelRenderer.from_payload(obs_dic, scale, vision_size)
-        return original_obs.render_around_player().transpose(2,0,1)
+        
+        full_obs = {
+            'image':original_obs.render_around_player().transpose(2,0,1),
+            'climbing': np.array(int(obs_dic['climbing'])),
+            'canDash': np.array(int(obs_dic['canDash'])),
+            'speeds': np.array([float(x) for x in obs_dic['speed'].split(', ')])}
+        return full_obs
         
     @staticmethod
     def plot_obs(obs, method='plt'):
