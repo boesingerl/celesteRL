@@ -20,6 +20,7 @@ import zmq
 from rtgym import RealTimeGymInterface
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import TensorBoardOutputFormat
+from collections import OrderedDict
 
 
 class CelesteGym(RealTimeGymInterface):
@@ -35,11 +36,14 @@ class CelesteGym(RealTimeGymInterface):
         self.vision_size = vision_size
 
     def get_observation_space(self):
-        return spaces.Tuple((spaces.Box(
+        return spaces.Tuple((spaces.Dict({'image':spaces.Box(
             low=0, high=1, shape=(LevelRenderer.max_idx+1,
                                   self.vision_size*self.scale,
-                                  self.vision_size*self.scale), dtype=np.float64
-        ),))
+                                  self.vision_size*self.scale), dtype=np.float64),
+                                          'climbing': spaces.MultiBinary(1),
+                                          'canDash': spaces.MultiBinary(1),
+                                          'speeds': spaces.Box(low=float('-inf'), high=float('inf'),shape=(2,)),
+                                         }),))
 
     def get_action_space(self):
         return spaces.MultiBinary(7)
@@ -214,6 +218,47 @@ class CustomEnv(gym.Env):
     def reset(self):
         obs, info = self.env.reset()
         return obs[0], info
+    def render(self, mode='rgb_array'):
+        rend =  self.env.env.env.interface.render_img()
+        return rend
+
+    def close(self):
+        self.env.close()
+
+class FlattenerEnv(gym.Env):
+    """Transform Tuple(Dict(Image), x, y ,z)) into Dict(Image, x, y, z) space."""
+
+    def __init__(self, env, render_mode='rgb_array'):
+        super().__init__()
+        # Define action and observation space
+        # They must be gym.spaces objects
+        # Example when using discrete actions:
+        self.action_space = env.action_space
+        # Example for using image as input (channel-first; channel-last also works):
+        
+        self.observation_space = spaces.Dict(OrderedDict(list(env.observation_space[0].items())
+                                                         + [(f'action_{i}',s) for i,s in enumerate(env.observation_space[1:])]))
+        self.env = env
+        
+        self.render_mode = render_mode
+
+    def _compute_obs(self, obs):
+        obsdict = obs[0].copy()
+        for i, x in enumerate(obs[1:]):
+            obsdict[f'action_{i}'] = x       
+        return obsdict
+    
+    def step(self, action):
+        obs, rew, terminated, truncated, info = self.env.step(action)
+        return self._compute_obs(obs), rew, terminated, truncated, info
+
+    def reset(self):
+        obs, info = self.env.reset()
+        
+        obs_reset = self._compute_obs(obs)
+        
+        return obs_reset, info
+    
     def render(self, mode='rgb_array'):
         rend =  self.env.env.env.interface.render_img()
         return rend

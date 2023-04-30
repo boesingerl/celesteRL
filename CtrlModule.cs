@@ -16,11 +16,11 @@ using System.Collections;
 using System.Threading;
 using MonoMod.Cil;
 using Mono.Cecil.Cil;
-using Celeste.Mod;
-using static Celeste.Player.ChaserStateSound;
 
 namespace Celeste.Mod.Ctrl
 {
+
+
     public class IgnorePropertiesResolver : DefaultContractResolver
     {
         private readonly HashSet<string> ignoreProps;
@@ -264,8 +264,17 @@ namespace Celeste.Mod.Ctrl
                 entities_ser.Add(attrs);
             }
 
+
+            
+            bool canDash = (ReflectionExtensions.GetPropertyValue<int>(player, "dashCooldownTimer") <= 0 && player.Dashes > 0);
+            Vector2 speed = player.Speed;
+            bool climbing = player.StateMachine.State == 1;
+
             observations = new Dictionary<string, object>
                 {
+                    ["canDash"] = canDash,
+                    ["speed"] = speed,
+                    ["climbing"] = climbing,
                     ["solids"] = leveldata.Solids,
                     ["bounds"] = leveldata.Bounds,
                     ["player"] = playerPos,
