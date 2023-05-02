@@ -25,7 +25,7 @@ from collections import OrderedDict
 
 class CelesteGym(RealTimeGymInterface):
 
-    def __init__(self, render_mode='rgb_array', scale=1, vision_size=64):
+    def __init__(self, render_mode='rgb_array', scale=4, vision_size=24):
         # Communication to C# component.
         
         self.context = None
@@ -39,7 +39,7 @@ class CelesteGym(RealTimeGymInterface):
         return spaces.Tuple((spaces.Dict({'image':spaces.Box(
             low=0, high=1, shape=(LevelRenderer.max_idx+1,
                                   self.vision_size*self.scale,
-                                  self.vision_size*self.scale), dtype=np.float64),
+                                  self.vision_size*self.scale), dtype=np.float32),
                                           'climbing': spaces.MultiBinary(1),
                                           'canDash': spaces.MultiBinary(1),
                                           'speeds': spaces.Box(low=float('-inf'), high=float('inf'),shape=(2,)),

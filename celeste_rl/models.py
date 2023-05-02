@@ -5,13 +5,60 @@ import torch as th
 from gymnasium import spaces
 from torch import nn
 from stable_baselines3.common.torch_layers import NatureCNN
-
+from .level import LevelRenderer
 
 import gymnasium.spaces as spaces
 
 
 import gymnasium as gym
 
+
+class ImprovisedCNN(BaseFeaturesExtractor):
+    """
+    :param observation_space:
+    :param features_dim: Number of features extracted.
+        This corresponds to the number of unit for the last layer.
+    :param normalized_image: Whether to assume that the image is already normalized
+        or not (this disables dtype and bounds checks): when True, it only checks that
+        the space is a Box and has 3 dimensions.
+        Otherwise, it checks that it has expected dtype (uint8) and bounds (values in [0, 255]).
+    """
+
+    def __init__(
+        self,
+        observation_space: gym.Space,
+        features_dim: int = 64,
+    ) -> None:
+        assert isinstance(observation_space, spaces.Box), (
+            "NatureCNN must be used with a gym.spaces.Box ",
+            f"observation space, not {observation_space}",
+        )
+        super().__init__(observation_space, features_dim)
+
+        self.n_space = observation_space.shape[0]-1
+        self.cnn = nn.Sequential(
+            nn.Conv2d(self.n_space*2, self.n_space*4, kernel_size=8, stride=4, groups=LevelRenderer.max_idx, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(self.n_space*4, 16, kernel_size=4, stride=2, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(16, 4, kernel_size=3, stride=1, padding=0),
+            nn.ReLU(),
+            nn.Flatten(),
+        )
+
+        self.linear = nn.Sequential(nn.LazyLinear(features_dim), nn.ReLU())
+        
+        self.forward(th.ones((1, self.n_space*4, observation_space.shape[1], observation_space.shape[2])))
+
+    def forward(self, observations: th.Tensor) -> th.Tensor:
+        fullobs = th.empty((observations.shape[0],self.n_space*2,observations.shape[-2],observations.shape[-1]))
+
+        for i in range(len(LevelRenderer.ID_MAP)):
+            fullobs[:, i*2] = observations[:, i]
+            fullobs[:, (i*2)+1] = observations[:, LevelRenderer.ID_MAP['Player']]
+
+        # fullinp = th.cat([observations[:, [i,LevelRenderer.ID_MAP['Player']]] for i in range(LevelRenderer.max_idx+1) if i != LevelRenderer.ID_MAP['Player']], dim=1)
+        return self.linear(self.cnn(fullobs))
 
 class CustomCombinedExtractor(BaseFeaturesExtractor):
     def __init__(self, observation_space: spaces.Dict):
@@ -33,7 +80,7 @@ class CustomCombinedExtractor(BaseFeaturesExtractor):
                 # We will just downsample one channel of the image by 4x4 and flatten.
                 # Assume the image is single-channel (subspace.shape[0] == 0)
                 
-                extractor = NatureCNN(subspace, normalized_image=True)
+                extractor = ImprovisedCNN(subspace)
                 extractors[key] = extractor
                 total_concat_size += extractor.linear[0].out_features
                 
