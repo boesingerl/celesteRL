@@ -56,7 +56,9 @@ namespace Celeste.Mod.Ctrl
         private bool runThread;
         private bool playerPresent;
         private Dictionary<string, object> observations;
+        private List<double> previousRewards;
         private double distance;
+        private double reward;
         private double bestX;
         private double bestY;
         private double deltaX;
@@ -75,10 +77,12 @@ namespace Celeste.Mod.Ctrl
             server.Bind("tcp://*:7777");
             inputFrame = null;
             distance = 0;
+            previousRewards = new List<double>();
             playerSpawn = Vector2.Zero;
             terminated = true;
             timesteps = 0;
             bestX = 0;
+            reward = 0;
             TPFlag = false;
             runThread = false;
             playerPresent = false;
@@ -135,7 +139,7 @@ namespace Celeste.Mod.Ctrl
                         | (inputFrame[2] == 1 ? Buttons.DPadUp : 0)
                         | (inputFrame[3] == 1 ? Buttons.DPadDown : 0)
                         | (inputFrame[4] == 1 ? Buttons.A : 0)
-                        | (inputFrame[5] == 1 ? Buttons.X : 0)
+                        //| (inputFrame[5] == 1 ? Buttons.X : 0)
                         | (inputFrame[6] == 1 ? Buttons.RightTrigger : 0)
                 );
                 GamePadDPad pad = new GamePadDPad(
@@ -180,6 +184,7 @@ namespace Celeste.Mod.Ctrl
         {
             terminated = true;
             TPFlag = true;
+            reward = -10;
         }
 
         private void SendObs(){
@@ -191,10 +196,11 @@ namespace Celeste.Mod.Ctrl
                     string clpay = server.ReceiveFrameString();
                     inputFrame = JsonConvert.DeserializeObject<List<int>>(clpay);
 
+                    double fullReward = distance - timesteps + reward;
                     string payload = JsonConvert.SerializeObject(
-                        new List<object>() { observations, distance - timesteps, terminated }
+                        new List<object>() { observations, fullReward, terminated }
                     );
-
+                    previousRewards.Add(fullReward);
                     server.SendFrame(payload);
 
                     if (inputFrame != null && inputFrame.Count == 1)
@@ -204,6 +210,8 @@ namespace Celeste.Mod.Ctrl
                         timesteps = 0;
                         bestX = 0;
                         TPFlag = true;
+                        reward = 0;
+                        previousRewards.Clear();
                     }
                 }
             }
@@ -366,18 +374,20 @@ namespace Celeste.Mod.Ctrl
     private void LevelOnRender(On.Celeste.Level.orig_Render orig, Level self) {
         orig(self);
 
-        try{
-            DrawInfo(self);
-        }catch(Exception e){
-            Console.WriteLine(e);
-        }
+
+        DrawInfo(self);
+
         
     }
 
 
     private void DrawInfo(Level level) {
 
-        string text = $"Current Reward:{distance - timesteps:F3}\nBest x: {bestX}\nCurrent x: {deltaX}\nBest y: {bestY}\nCurrent y: {deltaY}";
+        string lastRewards = JsonConvert.SerializeObject(previousRewards.Skip(Math.Max(0, previousRewards.Count() - 5)).Select(i => $"{i:F3}"));
+        string text = $"Current Reward:{distance - timesteps:F3}\nBest x: {bestX}\nCurrent x: {deltaX}\nBest y: {bestY}\nCurrent y: {deltaY}\nPrev: {lastRewards}";
+        string[] actions = new []{"Left", "Right", "Up", "Down", "Jump", "Dash", "Grab"};
+        string fulltext = text + "\n" + actions.Aggregate((a,b) => a + " " + b);
+
         if (string.IsNullOrEmpty(text)) {
             return;
         }
@@ -393,7 +403,7 @@ namespace Celeste.Mod.Ctrl
         float x = 10;
         float y = 10;
         float alpha = 0.8f;
-        Vector2 Size = JetBrainsMonoFont.Measure(text) * fontSize;
+        Vector2 Size = JetBrainsMonoFont.Measure(fulltext) * fontSize;
 
         float maxX = viewWidth - Size.X - margin - padding * 2;
         float maxY = viewHeight - Size.Y - margin - padding * 2;
@@ -409,6 +419,20 @@ namespace Celeste.Mod.Ctrl
 
         JetBrainsMonoFont.Draw(text, textPosition, Vector2.Zero, scale, Color.White * infoAlpha);
 
+        float xActions = x + padding;
+        float yActions = Size.Y + pixelScale;
+
+        for (int i = 0; i < actions.Length; i++)
+            {
+            string withSpace = actions[i] + " ";
+            JetBrainsMonoFont.Draw(actions[i],
+            new(xActions, yActions),
+            Vector2.Zero,
+            scale,
+            Color.White * (inputFrame != null && inputFrame.Count == 7 && inputFrame[i] == 1 ? 1f : 0.2f));
+            xActions += JetBrainsMonoFont.Measure(withSpace).X * fontSize;
+
+        }
         Draw.SpriteBatch.End();
     }
 
