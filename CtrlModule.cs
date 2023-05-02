@@ -16,6 +16,7 @@ using System.Collections;
 using System.Threading;
 using MonoMod.Cil;
 using Mono.Cecil.Cil;
+using TAS.EverestInterop.InfoHUD;
 
 namespace Celeste.Mod.Ctrl
 {
@@ -57,6 +58,9 @@ namespace Celeste.Mod.Ctrl
         private Dictionary<string, object> observations;
         private double distance;
         private double bestX;
+        private double bestY;
+        private double deltaX;
+        private double deltaY;
         private Vector2 playerSpawn;
         private bool terminated;
         private double timesteps;
@@ -90,6 +94,8 @@ namespace Celeste.Mod.Ctrl
             On.Celeste.Player.Update += PlayerUpdate;
             On.Monocle.Engine.Update += RespawnSpeed;
             IL.Monocle.MInput.Update += MInputOnUpdate;
+            On.Celeste.Level.Render += LevelOnRender;
+            
 
             runThread = true;
             runningThread = new Thread(SendObs);
@@ -108,6 +114,7 @@ namespace Celeste.Mod.Ctrl
             On.Celeste.Player.Update -= PlayerUpdate;
             On.Monocle.Engine.Update -= RespawnSpeed;
             IL.Monocle.MInput.Update -= MInputOnUpdate;
+            On.Celeste.Level.Render -= LevelOnRender;
 
             server?.Dispose();
         }
@@ -356,17 +363,72 @@ namespace Celeste.Mod.Ctrl
             }
         }
 
+    private void LevelOnRender(On.Celeste.Level.orig_Render orig, Level self) {
+        orig(self);
+
+        try{
+            DrawInfo(self);
+        }catch(Exception e){
+            Console.WriteLine(e);
+        }
+        
+    }
+
+
+    private void DrawInfo(Level level) {
+
+        string text = $"Current Reward:{distance - timesteps:F3}\nBest x: {bestX}\nCurrent x: {deltaX}\nBest y: {bestY}\nCurrent y: {deltaY}";
+        if (string.IsNullOrEmpty(text)) {
+            return;
+        }
+
+        int viewWidth = Engine.ViewWidth;
+        int viewHeight = Engine.ViewHeight;
+
+        float pixelScale = Engine.ViewWidth / 320f;
+        float margin = 2 * pixelScale;
+        float padding = 2 * pixelScale;
+        float fontSize = 0.15f * pixelScale * 10f / 10f;
+        float infoAlpha = 1f;
+        float x = 10;
+        float y = 10;
+        float alpha = 0.8f;
+        Vector2 Size = JetBrainsMonoFont.Measure(text) * fontSize;
+
+        float maxX = viewWidth - Size.X - margin - padding * 2;
+        float maxY = viewHeight - Size.Y - margin - padding * 2;
+
+        Rectangle bgRect = new((int) x, (int) y, (int) (Size.X + padding * 2), (int) (Size.Y + padding * 2));
+
+        Monocle.Draw.SpriteBatch.Begin();
+
+        Draw.Rect(bgRect, Color.Black * alpha);
+
+        Vector2 textPosition = new(x + padding, y + padding);
+        Vector2 scale = new(fontSize);
+
+        JetBrainsMonoFont.Draw(text, textPosition, Vector2.Zero, scale, Color.White * infoAlpha);
+
+        Draw.SpriteBatch.End();
+    }
+
         private void PlayerUpdate(On.Celeste.Player.orig_Update orig, global::Celeste.Player self)
         {
-            float deltaX = Convert.ToInt32(self.Center.X - playerSpawn.X);
+            deltaX = self.Center.X - playerSpawn.X;
+            deltaY = playerSpawn.Y - self.Center.Y;
 
             if (deltaX > bestX)
             {
-                distance = ((deltaX - bestX) / 100);
                 bestX = deltaX;
             }
 
-            timesteps += 0.00002;
+            if(deltaY > bestY){
+                bestY = deltaY;
+            }
+
+            distance = (deltaX + deltaY)/100;
+
+            timesteps += 0.0003;
 
             orig(self);
         }
@@ -434,4 +496,9 @@ namespace Celeste.Mod.Ctrl
             return result;
         }
     }
+
+
+
+
+
 }
