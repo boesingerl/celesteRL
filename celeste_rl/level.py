@@ -88,10 +88,10 @@ class LevelRenderer:
         original_obs = LevelRenderer.from_payload(obs_dic, scale, vision_size)
         
         full_obs = {
-            'image':original_obs.render_around_player().transpose(2,0,1),
+            'image':original_obs.render_around_player().transpose(2,0,1).astype('float32'),
             'climbing': np.array(int(obs_dic['climbing'])),
             'canDash': np.array(int(obs_dic['canDash'])),
-            'speeds': np.array([float(x) for x in obs_dic['speed'].split(', ')])}
+            'speeds': np.array([float(x) for x in obs_dic['speed'].split(', ')]).astype('float32')}
         return full_obs
         
     @staticmethod
