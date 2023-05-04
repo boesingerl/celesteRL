@@ -40,19 +40,19 @@ class CelesteGym(RealTimeGymInterface):
             low=0, high=1, shape=(LevelRenderer.max_idx+1,
                                   self.vision_size*self.scale,
                                   self.vision_size*self.scale), dtype=np.float32),
-                                          'climbing': spaces.MultiBinary(1),
-                                          'canDash': spaces.MultiBinary(1),
-                                          'speeds': spaces.Box(low=float('-inf'), high=float('inf'),shape=(2,)),
+                                          'climbing': spaces.Box(low=0, high=1, shape=(1,)),
+                                          'canDash': spaces.Box(low=0, high=1, shape=(1,)),
+                                          'speeds': spaces.Box(low=float('-inf'), high=float('inf'),shape=(2,), dtype=np.float32),
                                          }),))
 
     def get_action_space(self):
         return spaces.MultiBinary(7)
 
     def get_default_action(self):
-        return np.array([0,0,0,0,0,0,0], dtype='int8')
+        return np.array([0,0,0,0,0,0,0], dtype='float32')
 
     def send_control(self, action):
-        action = action.astype(np.uint8).tolist()
+        action = action.tolist()
         msg = json.dumps(action)
         self.socket.send_string(msg)
 
@@ -245,7 +245,7 @@ class FlattenerEnv(gym.Env):
     def _compute_obs(self, obs):
         obsdict = obs[0].copy()
         for i, x in enumerate(obs[1:]):
-            obsdict[f'action_{i}'] = x       
+            obsdict[f'action_{i}'] = (x > 0).astype(np.int8)  
         return obsdict
     
     def step(self, action):

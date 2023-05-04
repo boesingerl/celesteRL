@@ -51,7 +51,7 @@ namespace Celeste.Mod.Ctrl
 
         private ResponseSocket server;
         private Thread runningThread;
-        private List<int> inputFrame;
+        private List<double> inputFrame;
         private bool TPFlag;
         private bool runThread;
         private bool playerPresent;
@@ -63,6 +63,11 @@ namespace Celeste.Mod.Ctrl
         private double bestY;
         private double deltaX;
         private double deltaY;
+
+        private int ts;
+        private int xUpdateTs;
+        private int yUpdateTs;
+
         private Vector2 playerSpawn;
         private bool terminated;
         private double timesteps;
@@ -83,6 +88,9 @@ namespace Celeste.Mod.Ctrl
             timesteps = 0;
             bestX = 0;
             reward = 0;
+            ts = 0;
+            xUpdateTs = 0;
+            yUpdateTs = 0;
             TPFlag = false;
             runThread = false;
             playerPresent = false;
@@ -134,13 +142,13 @@ namespace Celeste.Mod.Ctrl
             {
                 // Convert agent action to keys pressed.
                 GamePadButtons buttons = new GamePadButtons(
-                    (inputFrame[0] == 1 ? Buttons.DPadLeft : 0)
-                        | (inputFrame[1] == 1 ? Buttons.DPadRight : 0)
-                        | (inputFrame[2] == 1 ? Buttons.DPadUp : 0)
-                        | (inputFrame[3] == 1 ? Buttons.DPadDown : 0)
-                        | (inputFrame[4] == 1 ? Buttons.A : 0)
-                        //| (inputFrame[5] == 1 ? Buttons.X : 0)
-                        | (inputFrame[6] == 1 ? Buttons.RightTrigger : 0)
+                    (inputFrame[0] > 0 ? Buttons.DPadLeft : 0)
+                        | (inputFrame[1] > 0 ? Buttons.DPadRight : 0)
+                        | (inputFrame[2] > 0 ? Buttons.DPadUp : 0)
+                        | (inputFrame[3] > 0 ? Buttons.DPadDown : 0)
+                        | (inputFrame[4] > 0 ? Buttons.A : 0)
+                        | (inputFrame[5] > 0 ? Buttons.X : 0)
+                        | (inputFrame[6] > 0 ? Buttons.B : 0)
                 );
                 GamePadDPad pad = new GamePadDPad(
                     inputFrame[2] == 1 ? ButtonState.Pressed : ButtonState.Released,
@@ -151,7 +159,7 @@ namespace Celeste.Mod.Ctrl
 
                 GamePadState state = new GamePadState(
                     new GamePadThumbSticks(new Vector2(0, 0), new Vector2(0, 0)),
-                    new GamePadTriggers(0, inputFrame[6] == 1 ? 1 : 0),
+                    new GamePadTriggers(0, 0),
                     buttons,
                     pad
                 );
@@ -184,7 +192,11 @@ namespace Celeste.Mod.Ctrl
         {
             terminated = true;
             TPFlag = true;
-            reward = -10;
+            //reward -= 10;
+
+            ts = 0;
+            xUpdateTs = 0;
+            yUpdateTs = 0;
         }
 
         private void SendObs(){
@@ -194,25 +206,26 @@ namespace Celeste.Mod.Ctrl
                 {
                     
                     string clpay = server.ReceiveFrameString();
-                    inputFrame = JsonConvert.DeserializeObject<List<int>>(clpay);
+                    inputFrame = JsonConvert.DeserializeObject<List<double>>(clpay);
 
                     double fullReward = distance - timesteps + reward;
                     string payload = JsonConvert.SerializeObject(
-                        new List<object>() { observations, fullReward, terminated }
+                        new List<object>() { observations, fullReward, false }
                     );
                     previousRewards.Add(fullReward);
                     server.SendFrame(payload);
 
-                    if (inputFrame != null && inputFrame.Count == 1)
-                    {
-                        terminated = false;
-                        distance = 0;
-                        timesteps = 0;
-                        bestX = 0;
-                        TPFlag = true;
-                        reward = 0;
-                        previousRewards.Clear();
-                    }
+
+                    terminated = false;
+                    distance = 0;
+                    timesteps = 0;
+                    bestX = 0;
+                    bestY  = 0;
+                    TPFlag = true;
+                    reward = 0;
+                    previousRewards.Clear();
+
+                    
                 }
             }
         }
@@ -425,12 +438,20 @@ namespace Celeste.Mod.Ctrl
         for (int i = 0; i < actions.Length; i++)
             {
             string withSpace = actions[i] + " ";
-            JetBrainsMonoFont.Draw(actions[i],
+
+            try{
+                            JetBrainsMonoFont.Draw(actions[i],
             new(xActions, yActions),
             Vector2.Zero,
             scale,
-            Color.White * (inputFrame != null && inputFrame.Count == 7 && inputFrame[i] == 1 ? 1f : 0.2f));
+            Color.White * (inputFrame != null && inputFrame.Count == 7 && inputFrame[i] > 0 ? 1f : 0.2f));
             xActions += JetBrainsMonoFont.Measure(withSpace).X * fontSize;
+            }
+            // not that much of a problem, ignore
+            catch(ArgumentOutOfRangeException){
+
+            }
+
 
         }
         Draw.SpriteBatch.End();
@@ -438,21 +459,31 @@ namespace Celeste.Mod.Ctrl
 
         private void PlayerUpdate(On.Celeste.Player.orig_Update orig, global::Celeste.Player self)
         {
+
+            ts++;
+
             deltaX = self.Center.X - playerSpawn.X;
             deltaY = playerSpawn.Y - self.Center.Y;
 
             if (deltaX > bestX)
             {
                 bestX = deltaX;
+                xUpdateTs = ts;
             }
 
             if(deltaY > bestY){
                 bestY = deltaY;
+                yUpdateTs = ts;
+            }
+
+            if(ts - yUpdateTs > 1000 && ts - xUpdateTs > 1000){
+                self.Die(Vector2.Zero);
+                reward -= 100;
             }
 
             distance = (deltaX + deltaY)/100;
 
-            timesteps += 0.0003;
+            timesteps += 0.003;
 
             orig(self);
         }
