@@ -195,6 +195,45 @@ class CustomCallback(BaseCallback):
         """
 
 
+class ImageEnv(gym.Env):
+    """Custom Environment that follows gym interface."""
+
+    def __init__(self, env, render_mode='rgb_array'):
+        super().__init__()
+        # Define action and observation space
+        # They must be gym.spaces objects
+        # Example when using discrete actions:
+        self.action_space = env.action_space
+        # Example for using image as input (channel-first; channel-last also works):
+        
+        og_shape = env.observation_space[0]['image'].shape
+        
+        self.observation_space = spaces.Box(shape=(og_shape[-2], og_shape[-1], 3), dtype=np.float32, low=0, high=1)
+        self.env = env
+        
+        self.render_mode = render_mode
+
+    @staticmethod
+    def _get_obs(obs):
+        img = obs[0]['image']
+        img = img[0] + img.argmax(0)
+        return LevelRenderer.cm(LevelRenderer.norm(img))[...,:3]
+    
+    def step(self, action):
+        obs, rew, terminated, truncated, info = self.env.step(action)
+        return ImageEnv._get_obs(obs), rew, terminated, truncated, info
+
+    def reset(self):
+        obs, info = self.env.reset()
+        return ImageEnv._get_obs(obs), info
+    
+    def render(self, mode='rgb_array'):
+        rend =  self.env.env.env.interface.render_img()
+        return rend
+
+    def close(self):
+        self.env.close()
+        
 class CustomEnv(gym.Env):
     """Custom Environment that follows gym interface."""
 

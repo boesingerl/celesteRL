@@ -12,7 +12,7 @@ using Monocle;
 using MonoMod.Utils;
 using Platform = Celeste.Platform;
 
-namespace Celeste.Mod.Ctrl;
+namespace Celeste.Mod.RL;
 
 internal delegate TReturn GetDelegate<in TInstance, out TReturn>(TInstance instance);
 

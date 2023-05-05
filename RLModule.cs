@@ -18,7 +18,7 @@ using MonoMod.Cil;
 using Mono.Cecil.Cil;
 using TAS.EverestInterop.InfoHUD;
 
-namespace Celeste.Mod.Ctrl
+namespace Celeste.Mod.RL
 {
 
 
@@ -45,9 +45,9 @@ namespace Celeste.Mod.Ctrl
         }
     }
 
-    public class CtrlModule : EverestModule
+    public class RLModule : EverestModule
     {
-        public static CtrlModule instance;
+        public static RLModule Instance;
 
         private ResponseSocket server;
         private Thread runningThread;
@@ -56,11 +56,15 @@ namespace Celeste.Mod.Ctrl
         private bool runThread;
         private bool playerPresent;
         private Dictionary<string, object> observations;
-        private List<double> previousRewards;
+        //private List<double> previousRewards;
         private double distance;
         private double reward;
         private double bestX;
         private double bestY;
+
+        private double bestXDiv;
+        private double bestYDiv;
+
         private double deltaX;
         private double deltaY;
 
@@ -71,22 +75,35 @@ namespace Celeste.Mod.Ctrl
         private Vector2 playerSpawn;
         private bool terminated;
         private double timesteps;
-        public static int respawnSpeed = 20;
         private const string StopFastRestartFlag = nameof(StopFastRestartFlag);
+        private static Detour HGameUpdate;
+        private static DGameUpdate OrigGameUpdate;
+        private delegate void DGameUpdate(Game self, GameTime gameTime);
 
-        public CtrlModule()
+        public override Type SettingsType => typeof(RLSettings);
+        public static RLSettings Settings => (RLSettings)Instance._Settings;
+        private List<string> roomsVisited;
+
+        public RLModule()
         {
-            instance = this;
+            Instance = this;
             runningThread = null;
             server = new ResponseSocket();
             server.Bind("tcp://*:7777");
             inputFrame = null;
             distance = 0;
-            previousRewards = new List<double>();
+            //previousRewards = new List<double>();
             playerSpawn = Vector2.Zero;
             terminated = true;
             timesteps = 0;
+
+            roomsVisited = new List<string>();
+
             bestX = 0;
+            bestY = 0;
+            bestXDiv = 0;
+            bestYDiv = 0;
+
             reward = 0;
             ts = 0;
             xUpdateTs = 0;
@@ -99,19 +116,31 @@ namespace Celeste.Mod.Ctrl
 
         public override void Load()
         {
-            On.Celeste.Celeste.Update += GameUpdate;
-            On.Monocle.MInput.GamePadData.Update += GpUpdate;
-            Everest.Events.Player.OnSpawn += OnSpawn;
-            Everest.Events.Player.OnDie += OnDie;
-            On.Celeste.Player.Update += PlayerUpdate;
-            On.Monocle.Engine.Update += RespawnSpeed;
-            IL.Monocle.MInput.Update += MInputOnUpdate;
-            On.Celeste.Level.Render += LevelOnRender;
-            
+
+
 
             runThread = true;
             runningThread = new Thread(SendObs);
             runningThread.Start();
+
+            OrigGameUpdate = (HGameUpdate = new Detour(
+            typeof(Game).GetMethodInfo("Update"),
+            typeof(RLModule).GetMethodInfo("GameUpdate")
+            )).GenerateTrampoline<DGameUpdate>();
+
+            using (new DetourContext { After = new List<string> { "*" } })
+            {
+                On.Monocle.Engine.Update += EngineUpdate;
+
+                On.Monocle.MInput.GamePadData.Update += GpUpdate;
+                Everest.Events.Player.OnSpawn += OnSpawn;
+                Everest.Events.Player.OnDie += OnDie;
+                On.Monocle.MInput.Update += MInput_Update;
+                On.Celeste.Player.Update += PlayerUpdate;
+                IL.Monocle.MInput.Update += MInputOnUpdate;
+                On.Celeste.Level.Render += LevelOnRender;
+                Everest.Events.Level.OnTransitionTo += OnTransitionTo;
+            }
         }
 
         public override void Unload()
@@ -119,16 +148,23 @@ namespace Celeste.Mod.Ctrl
             runThread = false;
             runningThread = null;
 
-            On.Celeste.Celeste.Update -= GameUpdate;
+
             On.Monocle.MInput.GamePadData.Update -= GpUpdate;
             Everest.Events.Player.OnSpawn -= OnSpawn;
+            On.Monocle.MInput.Update -= MInput_Update;
             Everest.Events.Player.OnDie -= OnDie;
             On.Celeste.Player.Update -= PlayerUpdate;
-            On.Monocle.Engine.Update -= RespawnSpeed;
+            On.Monocle.Engine.Update -= EngineUpdate;
             IL.Monocle.MInput.Update -= MInputOnUpdate;
             On.Celeste.Level.Render -= LevelOnRender;
+            Everest.Events.Level.OnTransitionTo -= OnTransitionTo;
 
             server?.Dispose();
+        }
+
+        private static void MInput_Update(On.Monocle.MInput.orig_Update orig)
+        {
+            orig();
         }
 
         private void GpUpdate(
@@ -173,6 +209,12 @@ namespace Celeste.Mod.Ctrl
                     BindingFlags.Static | BindingFlags.NonPublic
                 );
                 UpdateVirtualInputs.Invoke(null, new object[] { });
+
+                if (Settings.FrameStep)
+                {
+                    inputFrame = null;
+
+                }
             }
         }
 
@@ -188,44 +230,66 @@ namespace Celeste.Mod.Ctrl
             playerSpawn = player.Center;
         }
 
+
+        private void OnTransitionTo(Level level, LevelData next, Vector2 direction)
+        {
+            // Don't reward revisit of rooms.
+            if (!roomsVisited.Contains(next.Name))
+            {
+                roomsVisited.Add(next.Name);
+                reward += 10;
+            }
+        }
+
         private void OnDie(Player player)
         {
             terminated = true;
             TPFlag = true;
-            //reward -= 10;
+            reward -= 1;
 
             ts = 0;
             xUpdateTs = 0;
             yUpdateTs = 0;
         }
 
-        private void SendObs(){
+        private void SendObs()
+        {
             while (runThread)
             {
                 if (observations is not null && (playerPresent || terminated))
                 {
-                    
+
                     string clpay = server.ReceiveFrameString();
                     inputFrame = JsonConvert.DeserializeObject<List<double>>(clpay);
 
-                    double fullReward = distance - timesteps + reward;
+                    //double fullReward = distance - timesteps + reward;
+                    double fullReward = reward;
+
                     string payload = JsonConvert.SerializeObject(
                         new List<object>() { observations, fullReward, false }
                     );
-                    previousRewards.Add(fullReward);
+                    //previousRewards.Add(fullReward);
                     server.SendFrame(payload);
 
 
-                    terminated = false;
-                    distance = 0;
-                    timesteps = 0;
-                    bestX = 0;
-                    bestY  = 0;
-                    TPFlag = true;
-                    reward = 0;
-                    previousRewards.Clear();
+                    if (terminated){
+                        terminated = false;
+                        distance = 0;
+                        timesteps = 0;
 
+                        bestX = 0;
+                        bestY = 0;
+                        bestXDiv = 0;
+                        bestYDiv = 0;
+
+                        roomsVisited.Clear();
+                        TPFlag = true;
+                    }
+                    reward = 0;
                     
+                    //previousRewards.Clear();
+
+
                 }
             }
         }
@@ -242,7 +306,7 @@ namespace Celeste.Mod.Ctrl
             SolidTiles tiles = celesteLevel.SolidTiles;
             var mTextures = tiles.Tiles.Tiles.ToArray();
             var leveldata = celesteLevel.Session.LevelData;
-            
+
 
             Player player = Celeste.Scene.Tracker.GetEntity<Player>();
             if (player == null)
@@ -293,57 +357,31 @@ namespace Celeste.Mod.Ctrl
             }
 
 
-            
+
             bool canDash = (ReflectionExtensions.GetPropertyValue<int>(player, "dashCooldownTimer") <= 0 && player.Dashes > 0);
             Vector2 speed = player.Speed;
             bool climbing = player.StateMachine.State == 1;
 
             observations = new Dictionary<string, object>
-                {
-                    ["canDash"] = canDash,
-                    ["speed"] = speed,
-                    ["climbing"] = climbing,
-                    ["solids"] = leveldata.Solids,
-                    ["bounds"] = leveldata.Bounds,
-                    ["player"] = playerPos,
-                    ["entities"] = entities_ser
-                };
+            {
+                ["canDash"] = canDash,
+                ["speed"] = speed,
+                ["climbing"] = climbing,
+                ["solids"] = leveldata.Solids,
+                ["bounds"] = leveldata.Bounds,
+                ["player"] = playerPos,
+                ["entities"] = entities_ser
+            };
         }
 
-        private void GameUpdate(
+        private static void GameUpdate(
             On.Celeste.Celeste.orig_Update orig,
             Celeste self,
             GameTime gameTime
         )
         {
-            if (Celeste.Scene is Level)
-            {
-                Level lvl = (Level)Celeste.Scene;
-                Player player = lvl.Tracker.GetEntity<Player>();
-                if (TPFlag && player != null)
-                {
-                    if (lvl.Session.Level != "1")
-                    {
-                        MethodInfo CmdLoad = typeof(Commands).GetMethod(
-                            "CmdLoad",
-                            BindingFlags.Static | BindingFlags.NonPublic
-                        );
-                        CmdLoad.Invoke(null, new object[] { 1, "1" });
-                    }
+            OrigGameUpdate(self, gameTime);
 
-                    TPFlag = false;
-                }
-            }
-
-            updatePayload();
-
-            if (runningThread == null || !runningThread.IsAlive)
-            {
-                runningThread = new Thread(() => { });
-                runningThread.Start();
-            }
-
-            orig(self, gameTime);
         }
 
         // update controller even the game is lose focus
@@ -384,78 +422,83 @@ namespace Celeste.Mod.Ctrl
             }
         }
 
-    private void LevelOnRender(On.Celeste.Level.orig_Render orig, Level self) {
-        orig(self);
+        private void LevelOnRender(On.Celeste.Level.orig_Render orig, Level self)
+        {
+            orig(self);
 
 
-        DrawInfo(self);
-
-        
-    }
+            DrawInfo(self);
 
 
-    private void DrawInfo(Level level) {
-
-        string lastRewards = JsonConvert.SerializeObject(previousRewards.Skip(Math.Max(0, previousRewards.Count() - 5)).Select(i => $"{i:F3}"));
-        string text = $"Current Reward:{distance - timesteps:F3}\nBest x: {bestX}\nCurrent x: {deltaX}\nBest y: {bestY}\nCurrent y: {deltaY}\nPrev: {lastRewards}";
-        string[] actions = new []{"Left", "Right", "Up", "Down", "Jump", "Dash", "Grab"};
-        string fulltext = text + "\n" + actions.Aggregate((a,b) => a + " " + b);
-
-        if (string.IsNullOrEmpty(text)) {
-            return;
         }
 
-        int viewWidth = Engine.ViewWidth;
-        int viewHeight = Engine.ViewHeight;
 
-        float pixelScale = Engine.ViewWidth / 320f;
-        float margin = 2 * pixelScale;
-        float padding = 2 * pixelScale;
-        float fontSize = 0.15f * pixelScale * 10f / 10f;
-        float infoAlpha = 1f;
-        float x = 10;
-        float y = 10;
-        float alpha = 0.8f;
-        Vector2 Size = JetBrainsMonoFont.Measure(fulltext) * fontSize;
+        private void DrawInfo(Level level)
+        {
 
-        float maxX = viewWidth - Size.X - margin - padding * 2;
-        float maxY = viewHeight - Size.Y - margin - padding * 2;
+            //string lastRewards = JsonConvert.SerializeObject(previousRewards.Skip(Math.Max(0, previousRewards.Count() - 5)).Select(i => $"{i:F3}"));
+            string text = $"Current Reward:{reward:F3}\nBest x: {bestX}\nCurrent x: {deltaX}\nBest y: {bestY}\nCurrent y: {deltaY}";
+            string[] actions = new[] { "Left", "Right", "Up", "Down", "Jump", "Dash", "Grab" };
+            string fulltext = text + "\n" + actions.Aggregate((a, b) => a + " " + b);
 
-        Rectangle bgRect = new((int) x, (int) y, (int) (Size.X + padding * 2), (int) (Size.Y + padding * 2));
-
-        Monocle.Draw.SpriteBatch.Begin();
-
-        Draw.Rect(bgRect, Color.Black * alpha);
-
-        Vector2 textPosition = new(x + padding, y + padding);
-        Vector2 scale = new(fontSize);
-
-        JetBrainsMonoFont.Draw(text, textPosition, Vector2.Zero, scale, Color.White * infoAlpha);
-
-        float xActions = x + padding;
-        float yActions = Size.Y + pixelScale;
-
-        for (int i = 0; i < actions.Length; i++)
+            if (string.IsNullOrEmpty(text))
             {
-            string withSpace = actions[i] + " ";
-
-            try{
-                            JetBrainsMonoFont.Draw(actions[i],
-            new(xActions, yActions),
-            Vector2.Zero,
-            scale,
-            Color.White * (inputFrame != null && inputFrame.Count == 7 && inputFrame[i] > 0 ? 1f : 0.2f));
-            xActions += JetBrainsMonoFont.Measure(withSpace).X * fontSize;
-            }
-            // not that much of a problem, ignore
-            catch(ArgumentOutOfRangeException){
-
+                return;
             }
 
+            int viewWidth = Engine.ViewWidth;
+            int viewHeight = Engine.ViewHeight;
 
+            float pixelScale = Engine.ViewWidth / 320f;
+            float margin = 2 * pixelScale;
+            float padding = 2 * pixelScale;
+            float fontSize = 0.15f * pixelScale * 10f / 10f;
+            float infoAlpha = 1f;
+            float x = 10;
+            float y = 10;
+            float alpha = 0.8f;
+            Vector2 Size = JetBrainsMonoFont.Measure(fulltext) * fontSize;
+
+            float maxX = viewWidth - Size.X - margin - padding * 2;
+            float maxY = viewHeight - Size.Y - margin - padding * 2;
+
+            Rectangle bgRect = new((int)x, (int)y, (int)(Size.X + padding * 2), (int)(Size.Y + padding * 2));
+
+            Monocle.Draw.SpriteBatch.Begin();
+
+            Draw.Rect(bgRect, Color.Black * alpha);
+
+            Vector2 textPosition = new(x + padding, y + padding);
+            Vector2 scale = new(fontSize);
+
+            JetBrainsMonoFont.Draw(text, textPosition, Vector2.Zero, scale, Color.White * infoAlpha);
+
+            float xActions = x + padding;
+            float yActions = Size.Y + pixelScale;
+
+            for (int i = 0; i < actions.Length; i++)
+            {
+                string withSpace = actions[i] + " ";
+
+                try
+                {
+                    JetBrainsMonoFont.Draw(actions[i],
+    new(xActions, yActions),
+    Vector2.Zero,
+    scale,
+    Color.White * (inputFrame != null && inputFrame.Count == 7 && inputFrame[i] > 0 ? 1f : 0.2f));
+                    xActions += JetBrainsMonoFont.Measure(withSpace).X * fontSize;
+                }
+                // not that much of a problem, ignore
+                catch (ArgumentOutOfRangeException)
+                {
+
+                }
+
+
+            }
+            Draw.SpriteBatch.End();
         }
-        Draw.SpriteBatch.End();
-    }
 
         private void PlayerUpdate(On.Celeste.Player.orig_Update orig, global::Celeste.Player self)
         {
@@ -465,65 +508,138 @@ namespace Celeste.Mod.Ctrl
             deltaX = self.Center.X - playerSpawn.X;
             deltaY = playerSpawn.Y - self.Center.Y;
 
+            double deltaXDiv = Math.Floor(deltaX / Settings.RewardRate);
+            double deltaYDiv = Math.Floor(deltaY / Settings.RewardRate);
+
+            if (deltaXDiv > bestXDiv)
+            {
+                bestXDiv = deltaXDiv;
+                reward += 1;
+            }
+
+            if (deltaYDiv > bestYDiv)
+            {
+                bestYDiv = deltaYDiv;
+                reward += 1;
+            }
+
             if (deltaX > bestX)
             {
                 bestX = deltaX;
                 xUpdateTs = ts;
             }
 
-            if(deltaY > bestY){
+            if (deltaY > bestY)
+            {
                 bestY = deltaY;
                 yUpdateTs = ts;
             }
 
-            if(ts - yUpdateTs > 1000 && ts - xUpdateTs > 1000){
-                self.Die(Vector2.Zero);
-                reward -= 100;
-            }
+            //if(ts - yUpdateTs > 1000 && ts - xUpdateTs > 1000){
+            //    self.Die(Vector2.Zero);
+            //    reward -= 100;
+            //}
 
-            distance = (deltaX + deltaY)/100;
+            distance = (deltaX + deltaY) / 100;
 
-            timesteps += 0.003;
+            //timesteps += 0.003;
 
             orig(self);
         }
 
-        private static void RespawnSpeed(
+        private void EngineUpdate(
             On.Monocle.Engine.orig_Update orig,
             Engine self,
             GameTime time
         )
         {
-            orig(self, time);
+
+
+
+
 
             if (Engine.Scene is not Level level)
             {
+
+                orig(self, time);
+
                 return;
+            }
+            else
+            {
+                Player pl = level.Tracker.GetEntity<Player>();
+
+                // 加速复活过程
+                for (
+                    int i = 1;
+                    i < Settings.RespawnRate
+                        && (pl == null
+                        || pl.StateMachine.State == Player.StIntroRespawn
+                        || pl.StateMachine.State == Player.StIntroWalk
+                        || pl.StateMachine.State == Player.StIntroJump
+                        );
+                    i++
+                )
+                {
+                    orig(self, time);
+                }
+
+                // 加速章节启动
+                for (int i = 1; i < Settings.RespawnRate && RequireFastRestart(level, pl); i++)
+                {
+                    orig(self, time);
+                }
+
             }
 
             if (level.Paused)
             {
+                orig(self, time);
                 return;
             }
 
+
             Player player = level.Tracker.GetEntity<Player>();
 
-            // 加速复活过程
-            for (
-                int i = 1;
-                i < respawnSpeed
-                    && (player == null || player.StateMachine.State == Player.StIntroRespawn);
-                i++
-            )
+            if (Celeste.Scene is Level)
+            {
+                Level lvl = (Level)Celeste.Scene;
+                if (TPFlag && player != null)
+                {
+                    if (lvl.Session.Level != "1")
+                    {
+                        MethodInfo CmdLoad = typeof(Commands).GetMethod(
+                            "CmdLoad",
+                            BindingFlags.Static | BindingFlags.NonPublic
+                        );
+                        CmdLoad.Invoke(null, new object[] { 1, "1" });
+                    }
+
+                    TPFlag = false;
+                }
+            }
+
+            updatePayload();
+
+            if (runningThread == null || !runningThread.IsAlive)
+            {
+                runningThread = new Thread(SendObs);
+                runningThread.Start();
+            }
+
+            if (Settings.FrameStep)
+            {
+                if (inputFrame is not null)
+                {
+                    orig(self, time);
+                    inputFrame = null;
+                }
+            }
+            else
             {
                 orig(self, time);
             }
 
-            // 加速章节启动
-            for (int i = 1; i < respawnSpeed && RequireFastRestart(level, player); i++)
-            {
-                orig(self, time);
-            }
         }
 
         private static bool RequireFastRestart(Level level, Player player)

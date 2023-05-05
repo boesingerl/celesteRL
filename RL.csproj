@@ -3,8 +3,8 @@
 
   <PropertyGroup>
     <TargetFramework>net7.0</TargetFramework>
-    <AssemblyName>Ctrl</AssemblyName>
-    <RootNamespace>Celeste.Mod.ctrl</RootNamespace>
+    <AssemblyName>RL</AssemblyName>
+    <RootNamespace>Celeste.Mod.RL</RootNamespace>
     <LangVersion>10</LangVersion>
     <CelesteGamePath Condition="'$(CELESTEGAMEPATH)' == ''">..\..</CelesteGamePath>
     <AutoGenerateBindingRedirects>True</AutoGenerateBindingRedirects>
