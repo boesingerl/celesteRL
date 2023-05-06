@@ -16,7 +16,6 @@ using System.Collections;
 using System.Threading;
 using MonoMod.Cil;
 using Mono.Cecil.Cil;
-using TAS.EverestInterop.InfoHUD;
 
 namespace Celeste.Mod.RL
 {
@@ -33,6 +32,9 @@ namespace Celeste.Mod.RL
 
         // Example ON / OFF property with a default value.
         public bool FrameStep { get; set; } = false;
+
+        public bool RespawnLvl1 { get; set; } = false;
+
 
 
         [SettingRange(1, 20)] // Allow choosing a value from 0 (inclusive) to 10 (inclusive).

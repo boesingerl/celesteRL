@@ -16,7 +16,10 @@ using System.Collections;
 using System.Threading;
 using MonoMod.Cil;
 using Mono.Cecil.Cil;
-using TAS.EverestInterop.InfoHUD;
+using Microsoft.Xna.Framework.Graphics;
+
+using System.Runtime.InteropServices;
+using SkiaSharp;
 
 namespace Celeste.Mod.RL
 {
@@ -72,6 +75,8 @@ namespace Celeste.Mod.RL
         private int xUpdateTs;
         private int yUpdateTs;
 
+        private SKData obsBitmap;
+
         private Vector2 playerSpawn;
         private bool terminated;
         private double timesteps;
@@ -103,6 +108,8 @@ namespace Celeste.Mod.RL
             bestY = 0;
             bestXDiv = 0;
             bestYDiv = 0;
+
+            obsBitmap = null;
 
             reward = 0;
             ts = 0;
@@ -139,8 +146,33 @@ namespace Celeste.Mod.RL
                 On.Celeste.Player.Update += PlayerUpdate;
                 IL.Monocle.MInput.Update += MInputOnUpdate;
                 On.Celeste.Level.Render += LevelOnRender;
+                On.Celeste.Level.AfterRender += TestRender;
                 Everest.Events.Level.OnTransitionTo += OnTransitionTo;
             }
+        }
+
+        private void TestRender(On.Celeste.Level.orig_AfterRender orig, Level self)
+        {
+            orig(self);
+            RenderTarget2D target = GameplayBuffers.Level.Target;
+            byte[] textureData = new byte[4 * target.Width * target.Height];
+            target.GetData<byte>(textureData);
+
+            //SKBitmap bitmap = SKBitmap.Decode(textureData, new SKImageInfo(target.Width, target.Height, SKColorType.Rgba8888, ));
+
+
+            // create an empty bitmap
+            SKBitmap bitmap = new SKBitmap();
+
+            // pin the managed array so that the GC doesn't move it
+            var gcHandle = GCHandle.Alloc(textureData, GCHandleType.Pinned);
+
+            // install the pixels with the color type of the pixel data
+            var info = new SKImageInfo(target.Width, target.Height, SKColorType.Rgba8888);
+            bitmap.InstallPixels(info, gcHandle.AddrOfPinnedObject(), info.RowBytes, delegate { gcHandle.Free(); }, null);
+
+            obsBitmap = bitmap.Resize(new SKImageInfo(64, 64), SKFilterQuality.Low).Encode(SKEncodedImageFormat.Png, 0);
+
         }
 
         public override void Unload()
@@ -157,6 +189,7 @@ namespace Celeste.Mod.RL
             On.Monocle.Engine.Update -= EngineUpdate;
             IL.Monocle.MInput.Update -= MInputOnUpdate;
             On.Celeste.Level.Render -= LevelOnRender;
+            On.Celeste.Level.AfterRender -= TestRender;
             Everest.Events.Level.OnTransitionTo -= OnTransitionTo;
 
             server?.Dispose();
@@ -220,9 +253,9 @@ namespace Celeste.Mod.RL
 
         public static object GetProperty(Entity obj, string propertyName)
         {
-            var prop = obj.GetType().GetProperty(propertyName);
+            var prop = obj.GetType().GetProperties().FirstOrDefault(p => p.Name == propertyName);
 
-            return prop == null ? null : prop.GetValue(obj, null);
+            return prop is not null ? prop.GetValue(obj, null) : null;
         }
 
         private void OnSpawn(Player player)
@@ -244,7 +277,12 @@ namespace Celeste.Mod.RL
         private void OnDie(Player player)
         {
             terminated = true;
-            TPFlag = true;
+
+            if (Settings.RespawnLvl1)
+            {
+                TPFlag = true;
+
+            }
             reward -= 1;
 
             ts = 0;
@@ -259,6 +297,7 @@ namespace Celeste.Mod.RL
                 if (observations is not null && (playerPresent || terminated))
                 {
 
+#if false
                     string clpay = server.ReceiveFrameString();
                     inputFrame = JsonConvert.DeserializeObject<List<double>>(clpay);
 
@@ -271,6 +310,12 @@ namespace Celeste.Mod.RL
                     //previousRewards.Add(fullReward);
                     server.SendFrame(payload);
 
+#endif
+                    if (obsBitmap is not null)
+                    {
+                        server.ReceiveFrameString();
+                        server.SendFrame(obsBitmap.ToArray());
+                    }
 
                     if (terminated){
                         terminated = false;
@@ -283,7 +328,12 @@ namespace Celeste.Mod.RL
                         bestYDiv = 0;
 
                         roomsVisited.Clear();
-                        TPFlag = true;
+
+                        if (Settings.RespawnLvl1)
+                        {
+                            TPFlag = true;
+
+                        }
                     }
                     reward = 0;
                     
@@ -584,6 +634,11 @@ namespace Celeste.Mod.RL
                     orig(self, time);
                 }
 
+                for (int i = 1; i < Settings.RespawnRate && level.Transitioning; i++)
+                {
+                    orig(self, time);
+                }
+
                 // 加速章节启动
                 for (int i = 1; i < Settings.RespawnRate && RequireFastRestart(level, pl); i++)
                 {
@@ -657,7 +712,7 @@ namespace Celeste.Mod.RL
                 || level.TimerStarted
                     && !level.InCutscene
                     && level.Session.FirstLevel
-                    && player?.InControl != true;
+                    && player?.InControl != true || level.Transitioning;
 
             if (!result)
             {

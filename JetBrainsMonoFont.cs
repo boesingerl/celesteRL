@@ -5,7 +5,7 @@ using Celeste.Mod.UI;
 using Microsoft.Xna.Framework;
 using Monocle;
 
-namespace TAS.EverestInterop.InfoHUD;
+namespace Celeste.Mod.RL;
 
 // Copy of ActiveFont that always uses the JetBrains Mono font.
 public static class JetBrainsMonoFont {
