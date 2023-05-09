@@ -48,6 +48,13 @@
       <IncludeAssets>all</IncludeAssets>
       <PrivateAssets>contentfiles;analyzers;build</PrivateAssets>
     </PackageReference>
+
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="2.88.3">
+    <Private>true</Private>
+      <ExcludeAssets>none</ExcludeAssets>
+      <IncludeAssets>all</IncludeAssets>
+      <PrivateAssets>contentfiles;analyzers;build</PrivateAssets>
+    </PackageReference>
     
   </ItemGroup>
 

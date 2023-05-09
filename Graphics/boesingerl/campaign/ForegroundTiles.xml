@@ -12,7 +12,7 @@
 
     Template image file: https://i.imgur.com/jUq838l.png
   -->
-  <Tileset id="y" path="subfolder/betterTemplate">
+  <Tileset id="y" path="boesingerl/campaign/mytileset">
     <!-- edges -->
     <!-- top -->
     <set mask="x0x-111-x1x" tiles="6,5; 7,5; 8,5; 9,5"/>
@@ -305,6 +305,6 @@
 
   <Tileset id="n" copy="z" path="scifi"/>
 
-  <Tileset id="z" copy="y" path="boesingerl/template.png" sound="8"/>
+  <Tileset id="r" copy="y" path="boesingerl/campaign/mytileset" sound="8"/>
 
 </Data>

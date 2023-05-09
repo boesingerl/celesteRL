@@ -1,0 +1,3 @@
+[submodule "dreamerv3"]
+	path = dreamerv3
+	url = https://github.com/danijar/dreamerv3.git

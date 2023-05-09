@@ -55,6 +55,8 @@ namespace Celeste.Mod.RL
         private ResponseSocket server;
         private Thread runningThread;
         private List<double> inputFrame;
+        private List<double> inputFrameDisplay;
+        
         private bool TPFlag;
         private bool runThread;
         private bool playerPresent;
@@ -96,6 +98,7 @@ namespace Celeste.Mod.RL
             server = new ResponseSocket();
             server.Bind("tcp://*:7777");
             inputFrame = null;
+            inputFrameDisplay = null;
             distance = 0;
             //previousRewards = new List<double>();
             playerSpawn = Vector2.Zero;
@@ -146,12 +149,39 @@ namespace Celeste.Mod.RL
                 On.Celeste.Player.Update += PlayerUpdate;
                 IL.Monocle.MInput.Update += MInputOnUpdate;
                 On.Celeste.Level.Render += LevelOnRender;
-                On.Celeste.Level.AfterRender += TestRender;
+                On.Celeste.Level.AfterRender += RenderObs;
                 Everest.Events.Level.OnTransitionTo += OnTransitionTo;
             }
+
+            SimplifiedGraphicsFeature.Initialize();
+            CenterCamera.Load();
         }
 
-        private void TestRender(On.Celeste.Level.orig_AfterRender orig, Level self)
+        public override void Unload()
+        {
+            runThread = false;
+            runningThread = null;
+
+
+            On.Monocle.MInput.GamePadData.Update -= GpUpdate;
+            Everest.Events.Player.OnSpawn -= OnSpawn;
+            On.Monocle.MInput.Update -= MInput_Update;
+            Everest.Events.Player.OnDie -= OnDie;
+            On.Celeste.Player.Update -= PlayerUpdate;
+            On.Monocle.Engine.Update -= EngineUpdate;
+            IL.Monocle.MInput.Update -= MInputOnUpdate;
+            On.Celeste.Level.Render -= LevelOnRender;
+            On.Celeste.Level.AfterRender -= RenderObs;
+            Everest.Events.Level.OnTransitionTo -= OnTransitionTo;
+
+            SimplifiedGraphicsFeature.Unload();
+            CenterCamera.Unload();
+
+
+            server?.Dispose();
+        }
+
+        private void RenderObs(On.Celeste.Level.orig_AfterRender orig, Level self)
         {
             orig(self);
             RenderTarget2D target = GameplayBuffers.Level.Target;
@@ -171,28 +201,20 @@ namespace Celeste.Mod.RL
             var info = new SKImageInfo(target.Width, target.Height, SKColorType.Rgba8888);
             bitmap.InstallPixels(info, gcHandle.AddrOfPinnedObject(), info.RowBytes, delegate { gcHandle.Free(); }, null);
 
-            obsBitmap = bitmap.Resize(new SKImageInfo(64, 64), SKFilterQuality.Low).Encode(SKEncodedImageFormat.Png, 0);
+            using var subset =  new SKBitmap();
+            int width = 320;
+            int height = 180;
+            int squaresize = 32*Settings.VisionSize;
+            
+            SkiaSharp.SKRectI rectI = new SkiaSharp.SKRectI(width/2 - squaresize/2,
+                                                            height/2 - squaresize/2,
+                                                            width/2 + squaresize/2,
+                                                            height/2 + squaresize/2);
+            var worked = bitmap.ExtractSubset(subset, rectI);
 
-        }
 
-        public override void Unload()
-        {
-            runThread = false;
-            runningThread = null;
+            obsBitmap = subset.Resize(new SKImageInfo(64, 64), (SKFilterQuality) Settings.Downsampling).Encode(SKEncodedImageFormat.Png, 0);
 
-
-            On.Monocle.MInput.GamePadData.Update -= GpUpdate;
-            Everest.Events.Player.OnSpawn -= OnSpawn;
-            On.Monocle.MInput.Update -= MInput_Update;
-            Everest.Events.Player.OnDie -= OnDie;
-            On.Celeste.Player.Update -= PlayerUpdate;
-            On.Monocle.Engine.Update -= EngineUpdate;
-            IL.Monocle.MInput.Update -= MInputOnUpdate;
-            On.Celeste.Level.Render -= LevelOnRender;
-            On.Celeste.Level.AfterRender -= TestRender;
-            Everest.Events.Level.OnTransitionTo -= OnTransitionTo;
-
-            server?.Dispose();
         }
 
         private static void MInput_Update(On.Monocle.MInput.orig_Update orig)
@@ -300,9 +322,10 @@ namespace Celeste.Mod.RL
 #if false
                     string clpay = server.ReceiveFrameString();
                     inputFrame = JsonConvert.DeserializeObject<List<double>>(clpay);
+                    inputFrameDisplay = inputFrame;
 
                     //double fullReward = distance - timesteps + reward;
-                    double fullReward = reward;
+                    double fullReward = reward + distance;
 
                     string payload = JsonConvert.SerializeObject(
                         new List<object>() { observations, fullReward, false }
@@ -313,8 +336,17 @@ namespace Celeste.Mod.RL
 #endif
                     if (obsBitmap is not null)
                     {
-                        server.ReceiveFrameString();
-                        server.SendFrame(obsBitmap.ToArray());
+
+                        string clpay = server.ReceiveFrameString();
+                        inputFrame = JsonConvert.DeserializeObject<List<double>>(clpay);
+                        inputFrameDisplay = inputFrame;
+
+                        double fullReward = reward + distance;
+
+                        string payload = JsonConvert.SerializeObject(
+                            new List<object>() { obsBitmap.ToArray(), fullReward, terminated }
+                        );
+                        server.SendFrame(payload);
                     }
 
                     if (terminated){
@@ -487,7 +519,7 @@ namespace Celeste.Mod.RL
         {
 
             //string lastRewards = JsonConvert.SerializeObject(previousRewards.Skip(Math.Max(0, previousRewards.Count() - 5)).Select(i => $"{i:F3}"));
-            string text = $"Current Reward:{reward:F3}\nBest x: {bestX}\nCurrent x: {deltaX}\nBest y: {bestY}\nCurrent y: {deltaY}";
+            string text = $"Current Reward:{reward + distance:F3}\nBest x: {bestX}\nCurrent x: {deltaX}\nBest y: {bestY}\nCurrent y: {deltaY}";
             string[] actions = new[] { "Left", "Right", "Up", "Down", "Jump", "Dash", "Grab" };
             string fulltext = text + "\n" + actions.Aggregate((a, b) => a + " " + b);
 
@@ -536,7 +568,7 @@ namespace Celeste.Mod.RL
     new(xActions, yActions),
     Vector2.Zero,
     scale,
-    Color.White * (inputFrame != null && inputFrame.Count == 7 && inputFrame[i] > 0 ? 1f : 0.2f));
+    Color.White * (inputFrameDisplay != null && inputFrameDisplay.Count == 7 && inputFrameDisplay[i] > 0 ? 1f : 0.2f));
                     xActions += JetBrainsMonoFont.Measure(withSpace).X * fontSize;
                 }
                 // not that much of a problem, ignore
@@ -561,7 +593,7 @@ namespace Celeste.Mod.RL
             double deltaXDiv = Math.Floor(deltaX / Settings.RewardRate);
             double deltaYDiv = Math.Floor(deltaY / Settings.RewardRate);
 
-            if (deltaXDiv > bestXDiv)
+            /* if (deltaXDiv > bestXDiv)
             {
                 bestXDiv = deltaXDiv;
                 reward += 1;
@@ -583,7 +615,7 @@ namespace Celeste.Mod.RL
             {
                 bestY = deltaY;
                 yUpdateTs = ts;
-            }
+            } */
 
             //if(ts - yUpdateTs > 1000 && ts - xUpdateTs > 1000){
             //    self.Die(Vector2.Zero);
@@ -627,6 +659,8 @@ namespace Celeste.Mod.RL
                         || pl.StateMachine.State == Player.StIntroRespawn
                         || pl.StateMachine.State == Player.StIntroWalk
                         || pl.StateMachine.State == Player.StIntroJump
+                        || pl.StateMachine.State == Player.StIntroWakeUp
+                        || pl.StateMachine.State == Player.StIntroThinkForABit
                         );
                     i++
                 )
@@ -667,7 +701,7 @@ namespace Celeste.Mod.RL
                             "CmdLoad",
                             BindingFlags.Static | BindingFlags.NonPublic
                         );
-                        CmdLoad.Invoke(null, new object[] { 1, "1" });
+                        CmdLoad.Invoke(null, new object[] { lvl.Session.Area.ID, "1" });
                     }
 
                     TPFlag = false;
