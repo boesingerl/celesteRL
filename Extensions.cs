@@ -12,7 +12,7 @@ using Monocle;
 using MonoMod.Utils;
 using Platform = Celeste.Platform;
 
-namespace Celeste.Mod.Ctrl;
+namespace Celeste.Mod.RL;
 
 internal delegate TReturn GetDelegate<in TInstance, out TReturn>(TInstance instance);
 
@@ -86,6 +86,76 @@ internal static class FastReflection {
 
     public static GetDelegate<TInstance, TResult> CreateGetDelegate<TInstance, TResult>(string fieldName) {
         return CreateGetDelegate<TInstance, TResult>(typeof(TInstance), fieldName);
+    }
+}
+
+internal static class DynamicDataExtensions {
+    private static readonly ConditionalWeakTable<object, DynamicData> cached = new();
+
+    public static DynamicData GetDynamicDataInstance(this object obj) {
+        return cached.GetValue(obj, key => new DynamicData(key));
+    }
+}
+
+internal static class LevelExtensions {
+
+    public static Vector2 MouseToWorld(this Level level, Vector2 mousePosition) {
+        float viewScale = (float) Engine.ViewWidth / Engine.Width;
+        return level.ScreenToWorld(mousePosition / viewScale).Floor();
+    }
+}
+
+internal static class SceneExtensions {
+    public static Player GetPlayer(this Scene scene) => scene.Tracker.GetEntity<Player>();
+
+    public static Level GetLevel(this Scene scene) {
+        return scene switch {
+            Level level => level,
+            LevelLoader levelLoader => levelLoader.Level,
+            _ => null
+        };
+    }
+
+    public static Session GetSession(this Scene scene) {
+        return scene switch {
+            Level level => level.Session,
+            LevelLoader levelLoader => levelLoader.GetFieldValue<Session>("session"),
+            LevelExit levelExit => levelExit.GetFieldValue<Session>("session"),
+            AreaComplete areaComplete => areaComplete.Session,
+            _ => null
+        };
+    }
+}
+
+internal static class EnumerableExtensions {
+    public static bool IsEmpty<T>(this IEnumerable<T> enumerable) {
+        return !enumerable.Any();
+    }
+
+    public static bool IsNullOrEmpty<T>(this IEnumerable<T> enumerable) {
+        return enumerable == null || !enumerable.Any();
+    }
+
+    public static bool IsNotEmpty<T>(this IEnumerable<T> enumerable) {
+        return !enumerable.IsEmpty();
+    }
+
+    public static bool IsNotNullOrEmpty<T>(this IEnumerable<T> enumerable) {
+        return !enumerable.IsNullOrEmpty();
+    }
+
+    public static IEnumerable<T> SkipLast<T>(this IEnumerable<T> source, int n = 1) {
+        var it = source.GetEnumerator();
+        bool hasRemainingItems = false;
+        var cache = new Queue<T>(n + 1);
+
+        do {
+            if (hasRemainingItems = it.MoveNext()) {
+                cache.Enqueue(it.Current);
+                if (cache.Count > n)
+                    yield return cache.Dequeue();
+            }
+        } while (hasRemainingItems);
     }
 }
 

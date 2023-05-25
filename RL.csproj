@@ -3,8 +3,8 @@
 
   <PropertyGroup>
     <TargetFramework>net7.0</TargetFramework>
-    <AssemblyName>Ctrl</AssemblyName>
-    <RootNamespace>Celeste.Mod.ctrl</RootNamespace>
+    <AssemblyName>RL</AssemblyName>
+    <RootNamespace>Celeste.Mod.RL</RootNamespace>
     <LangVersion>10</LangVersion>
     <CelesteGamePath Condition="'$(CELESTEGAMEPATH)' == ''">..\..</CelesteGamePath>
     <AutoGenerateBindingRedirects>True</AutoGenerateBindingRedirects>
@@ -41,14 +41,26 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3">
       <Private>false</Private>
     </PackageReference>
+
+    <PackageReference Include="SkiaSharp" Version="2.88.3">
+    <Private>true</Private>
+      <ExcludeAssets>none</ExcludeAssets>
+      <IncludeAssets>all</IncludeAssets>
+      <PrivateAssets>contentfiles;analyzers;build</PrivateAssets>
+    </PackageReference>
+
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="2.88.3">
+    <Private>true</Private>
+      <ExcludeAssets>none</ExcludeAssets>
+      <IncludeAssets>all</IncludeAssets>
+      <PrivateAssets>contentfiles;analyzers;build</PrivateAssets>
+    </PackageReference>
     
   </ItemGroup>
 
   <ItemGroup>
-    <Reference Include="Celeste" HintPath="$(CELESTEGAMEPATH)\Celeste.dll">
-      <IncludeAssets>compile</IncludeAssets>
-      <Private>false</Private>
-      <PrivateAssets>all</PrivateAssets>
+    <Reference Include="Celeste">
+      <HintPath>..\..\Celeste.dll</HintPath>
     </Reference>
     <Reference Include="MMHOOK_Celeste" HintPath="$(CELESTEGAMEPATH)\MMHOOK_Celeste.dll">
       <Private>false</Private>
