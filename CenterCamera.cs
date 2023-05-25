@@ -60,10 +60,10 @@ public static class CenterCamera {
     private static Vector2? lastPlayerPosition;
     private static Vector2 offset;
     private static Vector2 screenOffset;
-    private static DateTime? arrowKeyPressTime;
+    //private static DateTime? arrowKeyPressTime;
     private static float viewportScale = 1f;
-    private static int zoomInterval;
-    private static Vector2? lockPosition;
+    //private static int zoomInterval;
+    //private static Vector2? lockPosition;
 
     // this must be <= 4096 / 320 = 12.8, it's used in FreeCameraHitbox and 4096 is the maximum texture size
     public const float MaximumViewportScale = 12f;
@@ -125,14 +125,14 @@ public static class CenterCamera {
         }
 
         //if (Hotkeys.LockCamera.Pressed) {
-        if (false) {
+/*         if (false) {
             if (lockPosition.HasValue) {
                 lockPosition = null;
             } else {
                 Camera camera = level.Camera;
                 lockPosition = camera.Position - offset + new Vector2(camera.Viewport.Width / 2f, camera.Viewport.Height / 2f);
             }
-        }
+        } */
     }
 
     private static void CenterTheCamera() {
@@ -142,8 +142,9 @@ public static class CenterCamera {
 
         Camera camera = level.Camera;
         if (Engine.Scene.GetPlayer() is { } player) {
-            lastPlayerPosition = lockPosition ?? player.Position;
+            lastPlayerPosition = ((Vector2?) null)  ?? player.Position;
         }
+
 
         if (lastPlayerPosition != null) {
             savedCameraPosition = camera.Position;
@@ -205,23 +206,23 @@ public static class CenterCamera {
 
     private static float ArrowKeySensitivity {
         get {
-            if (arrowKeyPressTime == null) {
-                return 1;
-            }
+            //if (arrowKeyPressTime == null) {
+            return 1;
+            //}
 
-            float sensitivity = (float) ((DateTime.Now - arrowKeyPressTime.Value).TotalMilliseconds / 200f);
-            return Calc.Clamp(sensitivity, 1, 6);
+/*             float sensitivity = (float) ((DateTime.Now - arrowKeyPressTime.Value).TotalMilliseconds / 200f);
+            return Calc.Clamp(sensitivity, 1, 6); */
         }
     }
 
     public static void ResetCamera() {
         //if (Hotkeys.FreeCamera.DoublePressed || MouseButtons.Right.DoublePressed) {
-        if (false) {
+/*         if (false) {
             offset = Vector2.Zero;
             screenOffset = Vector2.Zero;
             LevelZoom = 1;
             lockPosition = null;
-        }
+        } */
     }
 
     private static void MoveCamera(Level level) {
@@ -229,21 +230,21 @@ public static class CenterCamera {
             return;
         }
 
-        bool moveCamera = false;
+/*         bool moveCamera = false;
         bool moveScreenCamera = false;
 
         // info hud hotkey + arrow key
         //if (!Hotkeys.CameraUp.Check && !Hotkeys.CameraDown.Check && !Hotkeys.CameraLeft.Check && !Hotkeys.CameraRight.Check) {
         if (false) {
-            arrowKeyPressTime = null;
+            //arrowKeyPressTime = null;
         } else if (arrowKeyPressTime == null) {
             arrowKeyPressTime = DateTime.Now;
         }
 
         int moveY = 0;
-        int moveX = 0;
+        int moveX = 0; */
 
-        //if (Hotkeys.CameraUp.Check) {
+/*         //if (Hotkeys.CameraUp.Check) {
         if (false) {
             moveY -= 1;
         }
@@ -278,7 +279,7 @@ public static class CenterCamera {
                 offset += new Vector2(ArrowKeySensitivity * moveX, ArrowKeySensitivity * moveY);
                 moveCamera = moveX != 0 || moveY != 0;
             }
-        }
+        } */
 
         #if false
         // mouse right button

@@ -1,4 +1,4 @@
-﻿- Name: ctrl
+﻿- Name: Celeste RL
   Version: 1.0.0
   DLL: bin/Debug/net7.0/RL.dll
   Dependencies:

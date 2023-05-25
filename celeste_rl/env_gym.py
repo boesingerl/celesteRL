@@ -21,6 +21,7 @@ import PIL.Image as Image
 import io
 import json
 
+
 class CelesteImgGym(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
@@ -34,8 +35,6 @@ class CelesteImgGym(gym.Env):
                                   64,
                                  3), dtype=np.float32)
                                          })
-        
-        
         
 
         # We have 4 actions, corresponding to "right", "up", "left", "down"
