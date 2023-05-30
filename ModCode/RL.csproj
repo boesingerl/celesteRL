@@ -6,7 +6,7 @@
     <AssemblyName>RL</AssemblyName>
     <RootNamespace>Celeste.Mod.RL</RootNamespace>
     <LangVersion>10</LangVersion>
-    <CelesteGamePath Condition="'$(CELESTEGAMEPATH)' == ''">..\..</CelesteGamePath>
+    <CelesteGamePath Condition="'$(CELESTEGAMEPATH)' == ''">..\..\..</CelesteGamePath>
     <AutoGenerateBindingRedirects>True</AutoGenerateBindingRedirects>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
    
@@ -60,7 +60,7 @@
 
   <ItemGroup>
     <Reference Include="Celeste">
-      <HintPath>..\..\Celeste.dll</HintPath>
+      <HintPath>..\..\..\Celeste.dll</HintPath>
     </Reference>
     <Reference Include="MMHOOK_Celeste" HintPath="$(CELESTEGAMEPATH)\MMHOOK_Celeste.dll">
       <Private>false</Private>
