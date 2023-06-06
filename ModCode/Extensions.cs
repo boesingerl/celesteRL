@@ -1,4 +1,8 @@
-﻿using System;
+﻿/// <summary>
+/// Helpers for CelesteTAS-EverestInterop, see https://github.com/EverestAPI/CelesteTAS-EverestInterop/blob/master/CelesteTAS-EverestInterop/Source/Utils/Extensions.cs for original
+/// </summary>
+
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;

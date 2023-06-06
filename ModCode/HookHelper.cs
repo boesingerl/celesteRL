@@ -1,4 +1,8 @@
-﻿using System;
+﻿/// <summary>
+/// HookHelper from CelesteTAS-EverestInterop, see original at https://github.com/EverestAPI/CelesteTAS-EverestInterop/blob/master/CelesteTAS-EverestInterop/Source/Utils/HookHelper.cs
+/// </summary>
+
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Mono.Cecil.Cil;

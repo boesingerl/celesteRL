@@ -1,4 +1,8 @@
-﻿using System.Collections;
+﻿/// <summary>
+/// Helper class for drawing HUD from CelesteTAS-EverestInterop, see original at https://github.com/EverestAPI/CelesteTAS-EverestInterop/blob/master/CelesteTAS-EverestInterop/Source/EverestInterop/InfoHUD/JetBrainsMonoFont.cs
+/// </summary>
+
+using System.Collections;
 using Celeste;
 using Celeste.Mod;
 using Celeste.Mod.UI;

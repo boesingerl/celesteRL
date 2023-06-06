@@ -33,34 +33,51 @@ namespace Celeste.Mod.RL
 
         // Example ON / OFF property with a default value.
 
-        [SettingRange(0, 3)] // Allow choosing a value from 0 (inclusive) to 10 (inclusive).
+        // Interpolation type to use when resizing observations 
+        [SettingRange(0, 3)] 
         public int Downsampling { get; set; } = 0;
 
-        [SettingRange(1, 5)] // Allow choosing a value from 0 (inclusive) to 10 (inclusive).
+        // Distance around Madeline to show when creating observation
+        [SettingRange(1, 5)] 
         public int VisionSize { get; set; } = 3;
 
+        // Frame stepping 
         public bool FrameStep { get; set; } = false;
+
+        // Show HUD with reward, inputs, etc
         public bool ShowHUD { get; set; } = false;
 
-
+        // Whether to TP to first room on death
         public bool RespawnLvl1 { get; set; } = false;
 
-        public bool SimplifiedGraphics { get; set; } = false;
-
+        // Whether to center camera
         public bool CenterCamera { get; set; } = false;
 
+        // Simplified graphics options (todo: set them as submenu instead)
+        public bool SimplifiedGraphics { get; set; } = false;
         public int? SimplifiedLighting { get; set; } = 10;
         public int? SimplifiedBloomBase { get; set; } = 0;
         public int? SimplifiedBloomStrength { get; set; } = 1;
-        //public SimplifiedGraphicsFeature.SpinnerColor SimplifiedSpinnerColor { get; set; } = SimplifiedGraphicsFeature.SpinnerColor.All[1];
         public bool SimplifiedDustSpriteEdge { get; set; } = true;
         public bool SimplifiedScreenWipe { get; set; } = true;
         public bool SimplifiedColorGrade { get; set; } = true;
+        public bool SimplifiedBackgroundTiles { get; set; } = false;
+        public bool SimplifiedBackdrop { get; set; } = true;
+        public bool SimplifiedDecal { get; set; } = true;
+        public bool SimplifiedParticle { get; set; } = true;
+        public bool SimplifiedDistort { get; set; } = true;
+        public bool SimplifiedMiniTextbox { get; set; } = true;
+        public bool SimplifiedLightningStrike { get; set; } = true;
+        public bool SimplifiedClutteredEntity { get; set; } = true;
+        public bool SimplifiedHud { get; set; } = true;
+        public bool SimplifiedWavedEdge { get; set; } = true;
+        public bool SimplifiedSpikes { get; set; } = true;
 
+        // Tile style: used for replacing all tiles to solid green in custom level 
         public SimplifiedGraphicsFeature.SolidTilesStyle simplifiedSolidTilesStyle;
 
         public void CreateSimplifiedSolidTilesStyleEntry(TextMenu menu, bool inGame) {
-            menu.Add(new TextMenuExt.EnumerableSlider<SolidTilesStyle>("Solid Tiles Style".ToDialogText(), SolidTilesStyle.All,
+            menu.Add(new TextMenuExt.EnumerableSlider<SolidTilesStyle>("Solid Tiles Style", SolidTilesStyle.All,
                     RLModule.Settings.SimplifiedSolidTilesStyle).Change(value => {
                         RLModule.Settings.simplifiedSolidTilesStyle = value;
                         SimplifiedGraphicsFeature.ReplaceSolidTilesStyle();
@@ -79,27 +96,9 @@ namespace Celeste.Mod.RL
             }
         }
 
-        public bool SimplifiedBackgroundTiles { get; set; } = false;
-        public bool SimplifiedBackdrop { get; set; } = true;
-        public bool SimplifiedDecal { get; set; } = true;
-        public bool SimplifiedParticle { get; set; } = true;
-        public bool SimplifiedDistort { get; set; } = true;
-        public bool SimplifiedMiniTextbox { get; set; } = true;
-        public bool SimplifiedLightningStrike { get; set; } = true;
-        public bool SimplifiedClutteredEntity { get; set; } = true;
-        public bool SimplifiedHud { get; set; } = true;
-        public bool SimplifiedWavedEdge { get; set; } = true;
-        public bool SimplifiedSpikes { get; set; } = true;
-
-
-
-        [SettingRange(1, 20)] // Allow choosing a value from 0 (inclusive) to 10 (inclusive).
-        public int RespawnRate { get; set; } = 20;
-
-        [SettingRange(1, 70, true)] // Allow choosing a value from 0 (inclusive) to 10 (inclusive).
-        public int RewardRate{ get; set; } = 70;
-
-        
+        // Rate at which speed up when respawning, room transitions, etc
+        [SettingRange(1, 20)] 
+        public int RespawnRate { get; set; } = 20;        
 
     }
 

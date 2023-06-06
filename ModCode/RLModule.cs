@@ -56,21 +56,21 @@ namespace Celeste.Mod.RL
         private Thread runningThread;
         private List<double> inputFrame;
         private List<double> inputFrameDisplay;
-        
+
         private bool TPFlag;
         private bool runThread;
-        private bool playerPresent;
-        private Dictionary<string, object> observations;
-        //private List<double> previousRewards;
+
         private double distance;
         private double reward;
         private double fullReward;
 
+        private readonly int DEFAULT_PORT = 7777;
+        private int port;
+
         private double bestX;
         private double bestY;
 
-        //private double bestXDiv;
-        //private double bestYDiv;
+
 
         private double deltaX;
         private double deltaY;
@@ -86,7 +86,6 @@ namespace Celeste.Mod.RL
         private Vector2 playerSpawn;
         private Vector2 playerSpawnC;
         private bool terminated;
-        //private double timesteps;
         private const string StopFastRestartFlag = nameof(StopFastRestartFlag);
         private static Detour HGameUpdate;
         private static DGameUpdate OrigGameUpdate;
@@ -101,36 +100,36 @@ namespace Celeste.Mod.RL
             Instance = this;
             runningThread = null;
 
-            int port = 7777;
-            while (server is null) {
-                
-                try{
+            port = DEFAULT_PORT;
+            while (server is null)
+            {
+
+                try
+                {
                     server = new ResponseSocket();
                     server.Bind($"tcp://*:{port}");
-                }catch(AddressAlreadyInUseException){
+                }
+                catch (AddressAlreadyInUseException)
+                {
                     server = null;
                     port++;
-                }                
+                }
             }
 
             Console.WriteLine($"Connected to port {port}");
-                
+
             inputFrame = null;
             inputFrameDisplay = null;
             distance = 0;
-            //previousRewards = new List<double>();
+
             playerSpawn = Vector2.Zero;
             playerPos = Vector2.Zero;
             terminated = true;
-            //timesteps = 0;
 
             roomsVisited = new List<string>();
 
             bestX = 0;
             bestY = 0;
-            //bestXDiv = 0;
-            //bestYDiv = 0;
-
             obsBitmap = null;
 
             reward = 0;
@@ -138,8 +137,6 @@ namespace Celeste.Mod.RL
 
             TPFlag = false;
             runThread = false;
-            playerPresent = false;
-            observations = null;
         }
 
         public override void Load()
@@ -173,6 +170,7 @@ namespace Celeste.Mod.RL
             CenterCamera.Load();
         }
 
+
         public override void Unload()
         {
             runThread = false;
@@ -197,15 +195,18 @@ namespace Celeste.Mod.RL
             server?.Dispose();
         }
 
+
+        /// <summary>
+        /// Get rendered target, interpolate it, and store in class
+        /// </summary>
+        /// <param name="orig"></param>
+        /// <param name="self"></param>
         private void RenderObs(On.Celeste.Level.orig_AfterRender orig, Level self)
         {
             orig(self);
             RenderTarget2D target = GameplayBuffers.Level.Target;
             byte[] textureData = new byte[4 * target.Width * target.Height];
             target.GetData<byte>(textureData);
-
-            //SKBitmap bitmap = SKBitmap.Decode(textureData, new SKImageInfo(target.Width, target.Height, SKColorType.Rgba8888, ));
-
 
             // create an empty bitmap
             SKBitmap bitmap = new SKBitmap();
@@ -217,19 +218,19 @@ namespace Celeste.Mod.RL
             var info = new SKImageInfo(target.Width, target.Height, SKColorType.Rgba8888);
             bitmap.InstallPixels(info, gcHandle.AddrOfPinnedObject(), info.RowBytes, delegate { gcHandle.Free(); }, null);
 
-            using var subset =  new SKBitmap();
+            using var subset = new SKBitmap();
             int width = 320;
             int height = 180;
-            int squaresize = 32*Settings.VisionSize;
+            int squaresize = 32 * Settings.VisionSize;
 
-            SkiaSharp.SKRectI rectI = new SkiaSharp.SKRectI(width/2 - squaresize/2,
-                                                            height/2 - squaresize/2,
-                                                            width/2 + squaresize/2,
-                                                            height/2 + squaresize/2);
+            SkiaSharp.SKRectI rectI = new SkiaSharp.SKRectI(width / 2 - squaresize / 2,
+                                                            height / 2 - squaresize / 2,
+                                                            width / 2 + squaresize / 2,
+                                                            height / 2 + squaresize / 2);
             var worked = bitmap.ExtractSubset(subset, rectI);
 
 
-            obsBitmap = subset.Resize(new SKImageInfo(42, 42), (SKFilterQuality) Settings.Downsampling).Encode(SKEncodedImageFormat.Png, 0);
+            obsBitmap = subset.Resize(new SKImageInfo(42, 42), (SKFilterQuality)Settings.Downsampling).Encode(SKEncodedImageFormat.Png, 0);
 
         }
 
@@ -238,6 +239,11 @@ namespace Celeste.Mod.RL
             orig();
         }
 
+        /// <summary>
+        /// Update virtual gamepad with inputs from RL model
+        /// </summary>
+        /// <param name="orig"></param>
+        /// <param name="self"></param>
         private void GpUpdate(
             On.Monocle.MInput.GamePadData.orig_Update orig,
             MInput.GamePadData self
@@ -289,6 +295,12 @@ namespace Celeste.Mod.RL
             }
         }
 
+        /// <summary>
+        /// Access property or return null if it doesnt exist
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <param name="propertyName"></param>
+        /// <returns></returns>
         public static object GetProperty(Entity obj, string propertyName)
         {
             var prop = obj.GetType().GetProperties().FirstOrDefault(p => p.Name == propertyName);
@@ -296,6 +308,10 @@ namespace Celeste.Mod.RL
             return prop is not null ? prop.GetValue(obj, null) : null;
         }
 
+        /// <summary>
+        /// On spawn, set initial position (used for computing the reward)
+        /// </summary>
+        /// <param name="player"></param>
         private void OnSpawn(Player player)
         {
             playerPos = player.Center;
@@ -305,7 +321,12 @@ namespace Celeste.Mod.RL
             playerSpawnC = player.Position;
         }
 
-
+        /// <summary>
+        /// Additional reward when visiting a new room
+        /// </summary>
+        /// <param name="level"></param>
+        /// <param name="next"></param>
+        /// <param name="direction"></param>
         private void OnTransitionTo(Level level, LevelData next, Vector2 direction)
         {
             // Don't reward revisit of rooms.
@@ -316,6 +337,10 @@ namespace Celeste.Mod.RL
             }
         }
 
+        /// <summary>
+        /// On die, set flag to teleport to first room, lower reward
+        /// </summary>
+        /// <param name="player"></param>
         private void OnDie(Player player)
         {
             terminated = true;
@@ -328,9 +353,11 @@ namespace Celeste.Mod.RL
             reward -= 1;
 
             ts = 0;
-
         }
 
+        /// <summary>
+        /// Send rendered level observation to Gym RL env using NetMQ, recieve inputs to perform
+        /// </summary>
         private void SendObs()
         {
             while (runThread)
@@ -343,7 +370,7 @@ namespace Celeste.Mod.RL
                     inputFrameDisplay = inputFrame;
 
 
-                    double dist = (playerPos.X - prevPlayerPos.X - (playerPos.Y - prevPlayerPos.Y))/10;
+                    double dist = (playerPos.X - prevPlayerPos.X - (playerPos.Y - prevPlayerPos.Y)) / 10;
                     prevPlayerPos = playerPos;
                     fullReward = reward + dist;
 
@@ -352,16 +379,14 @@ namespace Celeste.Mod.RL
                     );
                     server.SendFrame(payload);
 
-                    if (terminated || (inputFrame != null && inputFrame.Count == 1 && inputFrame[0] == 1)){
+                    if (terminated || (inputFrame != null && inputFrame.Count == 1 && inputFrame[0] == 1))
+                    {
                         terminated = false;
                         inputFrame = null;
                         distance = 0;
-                        //timesteps = 0;
 
                         bestX = 0;
                         bestY = 0;
-                        //bestXDiv = 0;
-                        //bestYDiv = 0;
                         prevPlayerPos = playerPos;
                         roomsVisited.Clear();
 
@@ -372,8 +397,6 @@ namespace Celeste.Mod.RL
                         }
                     }
                     reward = 0;
-                    
-                    //previousRewards.Clear();
 
 
                 }
@@ -383,83 +406,14 @@ namespace Celeste.Mod.RL
         private void updatePayload()
         {
 
-/*             if (Celeste.Scene is not Level || Celeste.Scene.GetType() != typeof(Level))
-                return;
-
-            Level celesteLevel = (Level)Celeste.Scene;
-
-
-            SolidTiles tiles = celesteLevel.SolidTiles;
-            var mTextures = tiles.Tiles.Tiles.ToArray();
-            var leveldata = celesteLevel.Session.LevelData;
-
-
-            Player player = Celeste.Scene.Tracker.GetEntity<Player>();
-            if (player == null)
-                return;
-            Vector2 playerPos = player.Position;
-
-
-            Entity[] entits = Monocle.Engine.Scene.Entities.ToArray();
-            List<Dictionary<string, string>> entities_ser =
-                new List<Dictionary<string, string>>();
-
-            playerPresent = false;
-
-            foreach (Entity ent in entits)
-            {
-                Dictionary<string, string> attrs = new Dictionary<string, string>();
-
-                attrs["Name"] = ent.GetType().ToString();
-
-                if (attrs["Name"] == "Celeste.Player")
-                {
-                    playerPresent = true;
-                }
-
-                foreach (
-                    string attrname in new[]
-                    {
-                        "X",
-                        "Y",
-                        "Width",
-                        "Height",
-                        "Left",
-                        "Right",
-                        "Bottom",
-                        "Top",
-                        "Direction"
-                    }
-                )
-                {
-                    var val = GetProperty(ent, attrname);
-                    if (val != null)
-                    {
-                        attrs[attrname] = val.ToString();
-                    }
-                }
-
-                entities_ser.Add(attrs);
-            }
-
-
-
-            bool canDash = (ReflectionExtensions.GetPropertyValue<int>(player, "dashCooldownTimer") <= 0 && player.Dashes > 0);
-            Vector2 speed = player.Speed;
-            bool climbing = player.StateMachine.State == 1;
-
-            observations = new Dictionary<string, object>
-            {
-                ["canDash"] = canDash,
-                ["speed"] = speed,
-                ["climbing"] = climbing,
-                ["solids"] = leveldata.Solids,
-                ["bounds"] = leveldata.Bounds,
-                ["player"] = playerPos,
-                ["entities"] = entities_ser
-            }; */
         }
 
+        /// <summary>
+        /// Simply perform the original game update
+        /// </summary>
+        /// <param name="orig"></param>
+        /// <param name="self"></param>
+        /// <param name="gameTime"></param>
         private static void GameUpdate(
             On.Celeste.Celeste.orig_Update orig,
             Celeste self,
@@ -470,7 +424,10 @@ namespace Celeste.Mod.RL
 
         }
 
-        // update controller even the game is lose focus
+        /// <summary>
+        /// Update controller even when the game is not focused
+        /// </summary>
+        /// <param name="il"></param>
         private static void MInputOnUpdate(ILContext il)
         {
             ILCursor ilCursor = new(il);
@@ -493,6 +450,9 @@ namespace Celeste.Mod.RL
             }
         }
 
+        /// <summary>
+        /// Helper for MInputOnUpdate
+        /// </summary>
         private static void UpdateGamePads()
         {
             for (int i = 0; i < 4; i++)
@@ -508,23 +468,29 @@ namespace Celeste.Mod.RL
             }
         }
 
+        /// <summary>
+        /// On render, draw HUD
+        /// </summary>
+        /// <param name="orig"></param>
+        /// <param name="self"></param>
         private void LevelOnRender(On.Celeste.Level.orig_Render orig, Level self)
         {
             orig(self);
 
-
             DrawInfo(self);
-
-
         }
 
 
+        /// <summary>
+        /// Draw HUD with current reward, actions the RL agent is taking, best X,Y positions
+        /// </summary>
+        /// <param name="level"></param>
         private void DrawInfo(Level level)
         {
 
-            if (Settings.ShowHUD){
+            if (Settings.ShowHUD)
+            {
 
-                //string lastRewards = JsonConvert.SerializeObject(previousRewards.Skip(Math.Max(0, previousRewards.Count() - 5)).Select(i => $"{i:F3}"));
                 string text = $"Current Reward:{fullReward:F3}\nBest x: {bestX}\nCurrent x: {deltaX}\nBest y: {bestY}\nCurrent y: {deltaY}";
                 string[] actions = new[] { "Left", "Right", "Up", "Down", "Jump", "Dash", "Grab" };
                 string fulltext = text + "\n" + actions.Aggregate((a, b) => a + " " + b);
@@ -547,6 +513,8 @@ namespace Celeste.Mod.RL
                 float alpha = 0.8f;
                 Vector2 Size = JetBrainsMonoFont.Measure(fulltext) * fontSize;
 
+                Vector2 SizeBeforeActions = JetBrainsMonoFont.Measure(text) * fontSize;
+
                 float maxX = viewWidth - Size.X - margin - padding * 2;
                 float maxY = viewHeight - Size.Y - margin - padding * 2;
 
@@ -562,7 +530,7 @@ namespace Celeste.Mod.RL
                 JetBrainsMonoFont.Draw(text, textPosition, Vector2.Zero, scale, Color.White * infoAlpha);
 
                 float xActions = x + padding;
-                float yActions = Size.Y + pixelScale;
+                float yActions = SizeBeforeActions.Y + y + padding;
 
                 for (int i = 0; i < actions.Length; i++)
                 {
@@ -588,6 +556,10 @@ namespace Celeste.Mod.RL
                 Draw.SpriteBatch.End();
             }
         }
+
+        /// <summary>
+        /// Update position for computing the reward
+        /// </summary>
         private void PlayerUpdate(On.Celeste.Player.orig_Update orig, global::Celeste.Player self)
         {
 
@@ -598,55 +570,24 @@ namespace Celeste.Mod.RL
             deltaX = self.Center.X - playerSpawn.X;
             deltaY = playerSpawn.Y - self.Center.Y;
 
-            double deltaXDiv = Math.Floor(deltaX / Settings.RewardRate);
-            double deltaYDiv = Math.Floor(deltaY / Settings.RewardRate);
-
-            /* if (deltaXDiv > bestXDiv)
-            {
-                bestXDiv = deltaXDiv;
-                reward += 1;
-            }
-
-            if (deltaYDiv > bestYDiv)
-            {
-                bestYDiv = deltaYDiv;
-                reward += 1;
-            }
-
-            if (deltaX > bestX)
-            {
-                bestX = deltaX;
-                xUpdateTs = ts;
-            }
-
-            if (deltaY > bestY)
-            {
-                bestY = deltaY;
-                yUpdateTs = ts;
-            } */
-
-            //if(ts - yUpdateTs > 1000 && ts - xUpdateTs > 1000){
-            //    self.Die(Vector2.Zero);
-            //    reward -= 100;
-            //}
 
             distance = (deltaX + deltaY) / 100;
-
-            //timesteps += 0.003;
 
             orig(self);
         }
 
+        /// <summary>
+        /// Update engine, frame stepping, speed up on death / room transition, teleport if flag is set
+        /// </summary>
+        /// <param name="orig"></param>
+        /// <param name="self"></param>
+        /// <param name="time"></param>
         private void EngineUpdate(
             On.Monocle.Engine.orig_Update orig,
             Engine self,
             GameTime time
         )
         {
-
-
-
-
 
             if (Engine.Scene is not Level level)
             {
@@ -659,7 +600,7 @@ namespace Celeste.Mod.RL
             {
                 Player pl = level.Tracker.GetEntity<Player>();
 
-                // 加速复活过程
+                // Speed up intros
                 for (
                     int i = 1;
                     i < Settings.RespawnRate
@@ -676,12 +617,13 @@ namespace Celeste.Mod.RL
                     orig(self, time);
                 }
 
+                // Speed up level transitions
                 for (int i = 1; i < Settings.RespawnRate && level.Transitioning; i++)
                 {
                     orig(self, time);
                 }
 
-                // 加速章节启动
+                // Other chapter speed ups
                 for (int i = 1; i < Settings.RespawnRate && RequireFastRestart(level, pl); i++)
                 {
                     orig(self, time);
@@ -689,6 +631,7 @@ namespace Celeste.Mod.RL
 
             }
 
+            // Don't frame step if currently in pause
             if (level.Paused)
             {
                 orig(self, time);
@@ -696,20 +639,26 @@ namespace Celeste.Mod.RL
             }
 
 
+            // Custom respawn rooms depending on which agent is currently playing
+            // Temporary, only works for first level
             Player player = level.Tracker.GetEntity<Player>();
+            string[] hardcodedLevelList = { "1", "2", "3", "4", "3b", "5", "6", "6a", "6b", "6c", "7", "8" };
+            int respawnId = port - DEFAULT_PORT;
 
+
+            // TP to first level room if flag is set
             if (Celeste.Scene is Level)
             {
                 Level lvl = (Level)Celeste.Scene;
                 if (TPFlag && player != null)
                 {
-                    if (lvl.Session.Level != "1")
+                    if (lvl.Session.Level != hardcodedLevelList[respawnId])
                     {
                         MethodInfo CmdLoad = typeof(Commands).GetMethod(
                             "CmdLoad",
                             BindingFlags.Static | BindingFlags.NonPublic
                         );
-                        CmdLoad.Invoke(null, new object[] { lvl.Session.Area.ID, "1" });
+                        CmdLoad.Invoke(null, new object[] { lvl.Session.Area.ID, hardcodedLevelList[respawnId] });
                     }
                     player.Position = playerSpawnC;
                     player.UpdateHair(true);
@@ -722,12 +671,14 @@ namespace Celeste.Mod.RL
 
             updatePayload();
 
+            // Thread running to send observations to Gym environment
             if ((runningThread == null || !runningThread.IsAlive) && Celeste.Scene is Level)
             {
                 runningThread = new Thread(SendObs);
                 runningThread.Start();
             }
 
+            // Step a single frame if setting is set, otherwise continuously run
             if (Settings.FrameStep)
             {
                 if (inputFrame is not null)
@@ -743,6 +694,12 @@ namespace Celeste.Mod.RL
 
         }
 
+        /// <summary>
+        /// Helper for detecting when to speed up game speed during respawn
+        /// </summary>
+        /// <param name="level"></param>
+        /// <param name="player"></param>
+        /// <returns></returns>
         private static bool RequireFastRestart(Level level, Player player)
         {
             if (level.Session.GetFlag(StopFastRestartFlag))

@@ -1,4 +1,9 @@
-﻿using System;
+﻿/// <summary>
+/// Helper class from CelesteTAS-EverestInterop, see original at https://github.com/EverestAPI/CelesteTAS-EverestInterop/blob/master/CelesteTAS-EverestInterop/Source/Utils/ModUtils.cs
+/// </summary>
+
+
+using System;
 using System.Linq;
 using System.Reflection;
 using Celeste;

@@ -1,4 +1,8 @@
-﻿using System;
+﻿/// <summary>
+/// Simplified Graphics from CelesteTAS-EverestInterop, see original at https://github.com/EverestAPI/CelesteTAS-EverestInterop/blob/master/CelesteTAS-EverestInterop/Source/EverestInterop/SimplifiedGraphicsFeature.cs
+/// </summary>
+
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -111,8 +115,7 @@ public static class SimplifiedGraphicsFeature {
 
     public static void Unload() {
         On.Celeste.Level.Update -= Level_Update;
-/*         On.Celeste.CrystalStaticSpinner.CreateSprites -= CrystalStaticSpinner_CreateSprites;
-        IL.Celeste.CrystalStaticSpinner.GetHue -= CrystalStaticSpinnerOnGetHue; */
+
         On.Celeste.FloatingDebris.ctor_Vector2 -= FloatingDebris_ctor;
         On.Celeste.MoonCreature.ctor_Vector2 -= MoonCreature_ctor;
         On.Celeste.MirrorSurfaces.Render -= MirrorSurfacesOnRender;
@@ -382,25 +385,7 @@ public static class SimplifiedGraphicsFeature {
 
         return visible;
     }
-/* 
-    private static void CrystalStaticSpinner_CreateSprites(On.Celeste.CrystalStaticSpinner.orig_CreateSprites orig, CrystalStaticSpinner self) {
-        if (RLModule.Settings.SimplifiedGraphics && RLModule.Settings.SimplifiedSpinnerColor.Name >= 0) {
-            self.color = RLModule.Settings.SimplifiedSpinnerColor.Name;
-        }
 
-        orig(self);
-    }
-
-    private static void CrystalStaticSpinnerOnGetHue(ILContext il) {
-        ILCursor ilCursor = new(il);
-        if (ilCursor.TryGotoNext(MoveType.After, ins => ins.MatchCall(typeof(Calc), "HsvToColor"))) {
-            ilCursor.EmitDelegate<Func<Color, Color>>(IsSimplifiedSpinnerColor);
-        }
-    }
-
-    private static Color IsSimplifiedSpinnerColor(Color color) {
-        return RLModule.Settings.SimplifiedGraphics && RLModule.Settings.SimplifiedSpinnerColor.Name == CrystalColor.Rainbow ? Color.White : color;
-    } */
 
     private static DustStyles.DustStyle DustStyles_Get_Session(On.Celeste.DustStyles.orig_Get_Session orig, Session session) {
         if (RLModule.Settings.SimplifiedGraphics && RLModule.Settings.SimplifiedDustSpriteEdge) {
@@ -502,87 +487,12 @@ public static class SimplifiedGraphicsFeature {
 
         orig(self, position, size, direction, type);
     }
-/* 
-    private static void ModCustomSpinnerColor(ILContext il) {
-        ILCursor ilCursor = new(il);
-        if (ilCursor.TryGotoNext(MoveType.After,
-                i => i.OpCode == OpCodes.Ldarg_0,
-                i => i.OpCode == OpCodes.Ldarg_S && i.Operand.ToString() == "tint"
-            )) {
-            ilCursor.EmitDelegate<Func<string, string>>(GetSimplifiedSpinnerColor);
-        }
-    } */
 
-/*     private static string GetSimplifiedSpinnerColor(string color) {
-        return RLModule.Settings.SimplifiedGraphics && RLModule.Settings.SimplifiedSpinnerColor.Value != null
-            ? RLModule.Settings.SimplifiedSpinnerColor.Value
-            : color;
-    } */
-
-/*     private static void ModRainbowSpinnerColor(ILCursor ilCursor, ILContext ilContext) {
-        Instruction start = ilCursor.Next;
-        ilCursor.EmitDelegate<Func<bool>>(IsSimplifiedSpinnerColorNotNull);
-        ilCursor.Emit(OpCodes.Brfalse, start);
-        ilCursor.EmitDelegate<Func<Color>>(GetSimplifiedSpinnerColor);
-        ilCursor.Emit(OpCodes.Ret);
-    } */
-
-/*     private static bool IsSimplifiedSpinnerColorNotNull() {
-        return RLModule.Settings.SimplifiedGraphics && RLModule.Settings.SimplifiedSpinnerColor.Value != null;
-    }
-
-    private static Color GetSimplifiedSpinnerColor() {
-        return RLModule.Settings.SimplifiedSpinnerColor.Color;
-    } */
-/* 
-    private static void ModVivCustomSpinnerColor(ILContext il) {
-        ILCursor ilCursor = new(il);
-        Instruction start = ilCursor.Next;
-        ilCursor.EmitDelegate<Func<bool>>(IsSimplifiedSpinnerColorNotNull);
-        ilCursor.Emit(OpCodes.Brfalse, start);
-
-        Type type = ModUtils.GetType("VivHelper", "VivHelper.Entities.CustomSpinner");
-        if (type.GetFieldInfo("color") is { } colorField) {
-            ilCursor.Emit(OpCodes.Ldarg_0).EmitDelegate<Func<Color>>(GetSimplifiedSpinnerColor);
-            ilCursor.Emit(OpCodes.Stfld, colorField);
-        }
-
-        if (type.GetFieldInfo("borderColor") is { } borderColorField) {
-            ilCursor.Emit(OpCodes.Ldarg_0).EmitDelegate<Func<Color>>(GetTransparentColor);
-            ilCursor.Emit(OpCodes.Stfld, borderColorField);
-        }
-    } */
 
     private static Color GetTransparentColor() {
         return Color.Transparent;
     }
 
-    // ReSharper disable FieldCanBeMadeReadOnly.Global
-    /* 
-    public record struct SpinnerColor {
-        public static readonly List<SpinnerColor> All = new() {
-            new SpinnerColor((CrystalColor) (-1), null),
-            new SpinnerColor(CrystalColor.Rainbow, "#FFFFFF"),
-            new SpinnerColor(CrystalColor.Blue, "#639BFF"),
-            new SpinnerColor(CrystalColor.Red, "#FF4F4F"),
-            new SpinnerColor(CrystalColor.Purple, "#FF4FEF"),
-        };
-
-        public CrystalColor Name;
-        public string Value;
-        public Color Color;
-
-        private SpinnerColor(CrystalColor name, string value) {
-            Name = name;
-            Value = value;
-            Color = value == null ? default : Calc.HexToColor(value);
-        }
-
-        public override string ToString() {
-            string result = Name == (CrystalColor) (-1) ? "Default" : Name == CrystalColor.Rainbow ? "White" : Name.ToString();
-            return result.ToDialogText();
-        }
-    } */
 
     internal static string ToDialogText(this string input) => Dialog.Clean("TAS_" + input.Replace(" ", "_"));
 
@@ -612,14 +522,14 @@ public static class SimplifiedGraphicsFeature {
             new SolidTilesStyle("Deadgrass", 'l'),
             new SolidTilesStyle("Lost Levels", 'm'),
             new SolidTilesStyle("Scifi", 'n'),
-            new SolidTilesStyle("Greeen", 'r')
+            new SolidTilesStyle("Solid Green", 'r')
         };
 
         public string Name = Name;
         public char Value = Value;
 
         public override string ToString() {
-            return this == default ? "Default".ToDialogText() : Name;
+            return this == default ? "Default": Name;
         }
     }
 
