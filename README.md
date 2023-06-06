@@ -1,13 +1,15 @@
 # Celeste Reinforcement Learning
 
-<p align="center">
-  <img src="https://github.com/boesingerl/celesteRL/assets/32189761/7888de49-080a-4b02-a77e-0f9525e52a80" width="50%"/>
-</p>
+https://github.com/boesingerl/celesteRL/assets/32189761/bcc661c9-eeb2-44ed-adcc-47144b01e81a
+
 
 This repo aims to train a reinforcement learning agent that is able to solve Celeste levels.
 
-It works by communicating observations using an [Everest](https://everestapi.github.io/) mod with a python gym environment, that currently uses rllib to train agents.
+It works by communicating observations using an [Everest](https://everestapi.github.io/) mod with a python gymnasium environment, that currently uses rllib to train agents.
+It allows running multiple instances at the same time by obtaining observations directly from the rendering engine and allowing gamepad update while the window is not focused.
 
+It is currently in an early state: everything works but it is not well optimized (high cpu usage), and the code is not modular.
+Unfortunately, I haven't yet been able to train an agent that performed well (not even finishing the first level).
 
 ## Notable mentions
 
