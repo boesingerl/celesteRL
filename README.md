@@ -1,6 +1,6 @@
 # Celeste Reinforcement Learning
 
-https://github.com/boesingerl/celesteRL/assets/32189761/bcc661c9-eeb2-44ed-adcc-47144b01e81a
+https://github.com/boesingerl/celesteRL/assets/32189761/0e8670cd-6f92-468e-86a1-afb302597d9c
 
 
 This repo aims to train a reinforcement learning agent that is able to solve Celeste levels.
